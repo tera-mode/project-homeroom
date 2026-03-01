@@ -8,8 +8,7 @@ var _player_setup: Control = null
 var _cinematic_panel: Control = null
 var _classroom: Control = null
 var _student_card: Control = null
-var _day_result: Control = null
-var _mission_panel: Control = null
+var _result_presenter: Control = null
 var _ending_screen: Control = null
 
 func _ready() -> void:
@@ -42,11 +41,8 @@ func _load_scenes() -> void:
 	_student_card = load('res://scenes/StudentCard.tscn').instantiate()
 	add_child(_student_card)
 
-	_day_result = load('res://scenes/DayResult.tscn').instantiate()
-	add_child(_day_result)
-
-	_mission_panel = load('res://scenes/MissionPanel.tscn').instantiate()
-	add_child(_mission_panel)
+	_result_presenter = load('res://scenes/ResultPresenter.tscn').instantiate()
+	add_child(_result_presenter)
 
 	_ending_screen = load('res://scenes/EndingScreen.tscn').instantiate()
 	add_child(_ending_screen)
@@ -56,12 +52,11 @@ func _load_scenes() -> void:
 	_cinematic_panel.cinematic_finished.connect(_on_cinematic_finished)
 	GameManager.cinematic_requested.connect(_on_cinematic_requested)
 
-	# 初期表示状態
-	_classroom.visible     = false
-	_student_card.visible  = false
-	_day_result.visible    = false
-	_mission_panel.visible = false
-	_ending_screen.visible = false
+	# 初期表示
+	_classroom.visible       = false
+	_student_card.visible    = false
+	_result_presenter.visible = false
+	_ending_screen.visible   = false
 
 	_build_debug_button()
 
@@ -69,8 +64,6 @@ func _build_debug_button() -> void:
 	var btn = Button.new()
 	btn.text = '🔄 DEBUG: リセット'
 	btn.add_theme_font_size_override('font_size', 11)
-
-	# 半透明の赤スタイル
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.7, 0.1, 0.1, 0.75)
 	style.corner_radius_top_left = 6
@@ -82,8 +75,6 @@ func _build_debug_button() -> void:
 	hover_style.bg_color = Color(0.9, 0.2, 0.2, 0.9)
 	btn.add_theme_stylebox_override('hover', hover_style)
 	btn.add_theme_color_override('font_color', Color.WHITE)
-
-	# 右下に固定
 	btn.anchor_left   = 1.0
 	btn.anchor_top    = 1.0
 	btn.anchor_right  = 1.0
@@ -92,11 +83,8 @@ func _build_debug_button() -> void:
 	btn.offset_top    = -38
 	btn.offset_right  = -8
 	btn.offset_bottom = -8
-
-	# 全シーンより手前に表示
 	btn.z_index = 100
 	btn.mouse_filter = Control.MOUSE_FILTER_STOP
-
 	btn.pressed.connect(_on_debug_reset_pressed)
 	add_child(btn)
 
@@ -107,18 +95,17 @@ func _on_ending_reached(_ending_id: String) -> void:
 	_show_phase(GameManager.Phase.ENDING)
 
 func _show_phase(phase: GameManager.Phase) -> void:
-	if _title:         _title.visible         = (phase == GameManager.Phase.TITLE)
-	if _player_setup:  _player_setup.visible  = (phase == GameManager.Phase.PLAYER_SETUP)
-	# CinematicPanel は自前で visible を管理するため _show_phase では触らない
-	if _classroom:     _classroom.visible     = (phase == GameManager.Phase.HOMEROOM or phase == GameManager.Phase.PLACEMENT)
-	if _student_card:  _student_card.visible  = (phase == GameManager.Phase.HOMEROOM)
-	if _day_result:    _day_result.visible    = (phase == GameManager.Phase.DAY_RESULT)
-	if _mission_panel: _mission_panel.visible = (phase == GameManager.Phase.MISSION)
-	if _ending_screen: _ending_screen.visible = (phase == GameManager.Phase.ENDING)
+	if _title:           _title.visible           = (phase == GameManager.Phase.TITLE)
+	if _player_setup:    _player_setup.visible     = (phase == GameManager.Phase.PLAYER_SETUP)
+	# CinematicPanel は自前で visible を管理
+	if _classroom:       _classroom.visible        = (phase == GameManager.Phase.START_PHASE or phase == GameManager.Phase.CLASS_PHASE)
+	if _student_card:    _student_card.visible     = (phase == GameManager.Phase.START_PHASE)
+	if _result_presenter: _result_presenter.visible = (phase == GameManager.Phase.RETURN_PHASE)
+	if _ending_screen:   _ending_screen.visible    = (phase == GameManager.Phase.ENDING)
 
-func _on_player_setup_complete(name: String, gender: String, seat: int) -> void:
-	GameManager.complete_player_setup(name, gender, seat)
-	# complete_player_setup 内で cinematic_requested が emit される
+func _on_player_setup_complete(name: String, gender: String, p_type: String,
+		like_type: String, dislike_type: String, seat: int) -> void:
+	GameManager.complete_player_setup(name, gender, p_type, like_type, dislike_type, seat)
 
 func _on_cinematic_requested(scene_id: String) -> void:
 	var is_male = GameManager.player_gender == 'male'
@@ -134,10 +121,7 @@ func _on_cinematic_finished(scene_id: String) -> void:
 		var board = _get_board()
 		if board:
 			board.player_seat = GameManager.player_seat
-			# board_changed を emit してグリッド表示を即座に更新
-			# （start_new_game → HOMEROOM フェーズ移行後は自動更新が走らないため）
-			board.board_changed.emit()
-		GameManager.start_new_game()
+			GameManager.start_new_game(board)
 
 func _get_board() -> Node:
 	if _classroom == null:
@@ -145,7 +129,6 @@ func _get_board() -> Node:
 	return _classroom.get_node_or_null('Board')
 
 func _on_debug_reset_pressed() -> void:
-	# Board もリセットしてからGameManagerに委譲
 	var board = _get_board()
 	if board:
 		board.reset()

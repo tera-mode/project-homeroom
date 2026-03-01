@@ -1,0 +1,8 @@
+{
+  "types": [
+    { "id": "yancha",    "name": "ヤンチャ",     "icon": "🔥" },
+    { "id": "yuutousei", "name": "ゆうとうせい", "icon": "📖" },
+    { "id": "otaku",     "name": "オタク",       "icon": "🎮" },
+    { "id": "futsu",     "name": "ふつう",       "icon": "😊" }
+  ]
+}

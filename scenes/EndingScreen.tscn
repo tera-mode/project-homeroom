@@ -2,52 +2,33 @@
 
 [sub_resource type="GDScript" id="GDScript_ending"]
 script/source = "## EndingScreen.tscn のスクリプト
-## エンディング表示。7種のエンディングを表示し、周回選択肢を提供する。
+## エンディング表示。充実度ベースの4種エンディング。
 extends Control
 
-# エンディングデータ（要件書 §11）
 const ENDINGS = {
-	'legendary': {
-		'title': '★ 伝説の学園生活',
-		'text': '「先生、この子たちは本当にすごかったよ」\\n卒業式でそう言われた。\\nあの教室は、伝説になった。',
+	'true_ending': {
+		'title': '★★ 輝かしい学園生活',
+		'text': 'クラスのみんなと本当の絆を結べた。\\n卒業式、教室中に笑顔があふれた。\\nあの30日間は、一生の宝物になった。',
 		'color': Color(1.0, 0.84, 0.0),
-		'bg_color': Color(0.1, 0.05, 0.2)
+		'bg_color': Color(0.08, 0.05, 0.18)
 	},
-	'full_youth': {
-		'title': '★ 青春フルコース',
-		'text': '「このクラスでよかった」\\nみんながそう言った。\\n笑いあり、涙あり、ドキドキあり。\\n完璧な青春だった。',
-		'color': Color(1.0, 0.9, 0.2),
-		'bg_color': Color(0.05, 0.1, 0.2)
+	'normal_ending': {
+		'title': '★ 楽しい学園生活',
+		'text': 'たくさんの友達ができた。\\n毎日がにぎやかで、あっという間だった。\\n「また会おうね」そう言って卒業した。',
+		'color': Color(0.4, 0.8, 1.0),
+		'bg_color': Color(0.05, 0.08, 0.18)
 	},
-	'romance': {
-		'title': '恋愛エンド',
-		'text': '放課後の教室に、二人だけが残った。\\n「……ずっと、そばにいてもいいですか？」\\n窓から差し込む夕陽が、二人を染めた。',
-		'color': Color(1.0, 0.4, 0.6),
-		'bg_color': Color(0.2, 0.05, 0.1)
+	'plain_ending': {
+		'title': 'ふつうの学園生活',
+		'text': '可もなく不可もない30日だった。\\n特別なことは何も起きなかったけど、\\nそれはそれで、悪くなかったかもしれない。',
+		'color': Color(0.7, 0.75, 0.85),
+		'bg_color': Color(0.08, 0.08, 0.12)
 	},
-	'studious': {
-		'title': 'ガリ勉エンド',
-		'text': '成績は学年トップだった。\\nでも卒業式、誰も声をかけてくれなかった。\\n廊下の隅で、一人で歩いて帰った。',
-		'color': Color(0.4, 0.6, 1.0),
-		'bg_color': Color(0.05, 0.05, 0.15)
-	},
-	'mood_maker': {
-		'title': 'ムードメーカーエンド',
-		'text': '楽しかった。本当に楽しかった。\\nでも卒業式の夜、ふと思った。\\n「……何か、成し遂げたかなあ」',
-		'color': Color(0.6, 0.2, 0.9),
-		'bg_color': Color(0.1, 0.05, 0.2)
-	},
-	'loner': {
-		'title': 'ぼっちエンド',
-		'text': '卒業式。誰にも声をかけられなかった。\\n桜の花びらが、一人分だけ落ちてきた。\\nそれでも、あの教室には戻れない。',
-		'color': Color(0.6, 0.6, 0.6),
-		'bg_color': Color(0.08, 0.08, 0.08)
-	},
-	'restart': {
-		'title': 'もう一度、この教室で',
-		'text': '「やり直せたら……」\\nそう思いながら卒業式を終えた。\\n\\nでも大丈夫。また、あの教室の扉を開ければいい。',
-		'color': Color(0.8, 0.9, 1.0),
-		'bg_color': Color(0.05, 0.1, 0.15)
+	'bad_ending': {
+		'title': 'つらい学園生活',
+		'text': 'うまくいかないことばかりだった。\\n卒業式、教室はしんとしていた。\\n「やり直せたら……」そう思いながら帰った。',
+		'color': Color(0.6, 0.3, 0.3),
+		'bg_color': Color(0.08, 0.05, 0.05)
 	}
 }
 
@@ -58,7 +39,6 @@ func _ready() -> void:
 	_build_ui()
 
 func _build_ui() -> void:
-	# 背景
 	var bg = ColorRect.new()
 	bg.name = 'Background'
 	bg.anchor_right = 1.0
@@ -66,28 +46,24 @@ func _build_ui() -> void:
 	bg.color = Color(0.05, 0.05, 0.1)
 	add_child(bg)
 
-	# メインコンテナ
 	var vbox = VBoxContainer.new()
 	vbox.name = 'Content'
 	vbox.anchor_left = 0.1
-	vbox.anchor_top = 0.1
+	vbox.anchor_top = 0.08
 	vbox.anchor_right = 0.9
-	vbox.anchor_bottom = 0.9
-	vbox.add_theme_constant_override('separation', 24)
+	vbox.anchor_bottom = 0.92
+	vbox.add_theme_constant_override('separation', 20)
 	add_child(vbox)
 
-	# タイトル
 	var title = Label.new()
 	title.name = 'Title'
 	title.add_theme_font_size_override('font_size', 36)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
-	# 区切り
 	var sep = HSeparator.new()
 	vbox.add_child(sep)
 
-	# エンディングテキスト
 	var text = RichTextLabel.new()
 	text.name = 'EndingText'
 	text.add_theme_font_size_override('normal_font_size', 18)
@@ -97,23 +73,17 @@ func _build_ui() -> void:
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD
 	vbox.add_child(text)
 
-	# パラメータ最終値表示
-	var params_display = HBoxContainer.new()
-	params_display.name = 'FinalParams'
-	params_display.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_child(params_display)
+	var fulfillment_lbl = Label.new()
+	fulfillment_lbl.name = 'FulfillmentLabel'
+	fulfillment_lbl.add_theme_font_size_override('font_size', 16)
+	fulfillment_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	fulfillment_lbl.add_theme_color_override('font_color', Color.WHITE)
+	vbox.add_child(fulfillment_lbl)
 
-	# ボタン群
 	var btn_row = HBoxContainer.new()
 	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	btn_row.add_theme_constant_override('separation', 20)
 	vbox.add_child(btn_row)
-
-	var retry_btn = Button.new()
-	retry_btn.text = 'もう一度プレイ'
-	retry_btn.add_theme_font_size_override('font_size', 16)
-	retry_btn.pressed.connect(_on_retry_pressed)
-	btn_row.add_child(retry_btn)
 
 	var title_btn = Button.new()
 	title_btn.text = 'タイトルに戻る'
@@ -128,58 +98,31 @@ func _on_ending_reached(ending_id: String) -> void:
 	_animate_in()
 
 func _show_ending(ending_id: String) -> void:
-	var data = ENDINGS.get(ending_id, ENDINGS['restart'])
-
-	# 背景色変更
+	var data = ENDINGS.get(ending_id, ENDINGS['plain_ending'])
 	var bg = get_node_or_null('Background')
 	if bg:
 		bg.color = data['bg_color']
-
-	# タイトル
 	var title = get_node_or_null('Content/Title')
 	if title:
 		title.text = data['title']
 		title.add_theme_color_override('font_color', data['color'])
-
-	# テキスト
 	var text = get_node_or_null('Content/EndingText')
 	if text:
 		text.text = data['text']
 		text.add_theme_color_override('default_color', Color.WHITE)
-
-	# 最終パラメータ表示
-	_show_final_params()
-
-func _show_final_params() -> void:
-	var params_display = get_node_or_null('Content/FinalParams')
-	if params_display == null:
-		return
-	for child in params_display.get_children():
-		child.queue_free()
-
-	var icons = {'study': '📚', 'romance': '💖', 'friendship': '🤝', 'popularity': '⭐', 'happening': '🌟'}
-	var params = ParamStore.get_all_params()
-	for param_id in ['study', 'romance', 'friendship', 'popularity', 'happening']:
-		var val = params.get(param_id, 0)
-		var lbl = Label.new()
-		lbl.text = '%s %d' % [icons.get(param_id, ''), val]
-		lbl.add_theme_font_size_override('font_size', 16)
-		lbl.add_theme_color_override('font_color', Color.WHITE)
-		params_display.add_child(lbl)
+	var f_lbl = get_node_or_null('Content/FulfillmentLabel')
+	if f_lbl:
+		var fulfillment = CharacterState.get_state('player').get('fulfillment', 0)
+		f_lbl.text = '最終充実度: %d' % fulfillment
 
 func _animate_in() -> void:
 	modulate.a = 0.0
 	var tween = create_tween()
 	tween.tween_property(self, 'modulate:a', 1.0, 1.0)
 
-func _on_retry_pressed() -> void:
-	visible = false
-	GameManager.reset_and_start()
-
 func _on_title_pressed() -> void:
 	visible = false
-	GameManager.current_phase = GameManager.Phase.TITLE
-	GameManager.phase_changed.emit(GameManager.Phase.TITLE)
+	GameManager.reset_to_title()
 "
 
 [node name="EndingScreen" type="Control"]

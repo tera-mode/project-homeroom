@@ -9,14 +9,8 @@ var _all_students: Array = []
 # 現在の周回数（unlock_cycle フィルタに使用）
 var current_cycle: int = 1
 
-# カテゴリ別出現重み
-const CATEGORY_WEIGHTS: Dictionary = {
-	"honor": 3.0,
-	"idol": 2.0,
-	"yankee": 2.0,
-	"entertainer": 1.0,
-	"wildcard": 0.3
-}
+# v2.0: rarity ベースの重み係数（rarity 高 = 出にくい）
+# weight = 1.0 / rarity
 
 func _ready() -> void:
 	_load_students()
@@ -68,13 +62,11 @@ func draw_random_student(already_placed: Array = []) -> Dictionary:
 	if pool.is_empty():
 		return {}
 
-	# 重み付きランダム抽選
+	# rarity 逆数で重み付きランダム抽選
 	var total_weight = 0.0
 	var weights = []
 	for student in pool:
-		var category = student.get("category", "honor")
-		var rarity = student.get("rarity", 1)
-		var w = CATEGORY_WEIGHTS.get(category, 1.0) / rarity
+		var w = 1.0 / max(student.get("rarity", 1), 1)
 		weights.append(w)
 		total_weight += w
 

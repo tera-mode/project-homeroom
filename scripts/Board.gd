@@ -171,6 +171,36 @@ func get_neighbors(seat_index: int, scope: String) -> Array:
 				if i != seat_index:
 					result.append(i)
 
+		"left_right":
+			# 左右2マス（行またぎなし）
+			var left = seat_index - 1
+			if left >= 0 and (left % COLS) != COLS - 1:
+				result.append(left)
+			var right = seat_index + 1
+			if right < TOTAL_SEATS and (right % COLS) != 0:
+				result.append(right)
+
+		"left_only":
+			# 左1マス（行またぎなし）
+			var left = seat_index - 1
+			if left >= 0 and (left % COLS) != COLS - 1:
+				result.append(left)
+
+		"right_only":
+			# 右1マス（行またぎなし）
+			var right = seat_index + 1
+			if right < TOTAL_SEATS and (right % COLS) != 0:
+				result.append(right)
+
+		"up_down":
+			# 上下2マス
+			var up = seat_index - COLS
+			if up >= 0:
+				result.append(up)
+			var down = seat_index + COLS
+			if down < TOTAL_SEATS:
+				result.append(down)
+
 		"self":
 			result = [seat_index]
 

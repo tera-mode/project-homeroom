@@ -24,10 +24,13 @@ config/features=PackedStringArray("4.6", "GL Compatibility")
 [autoload]
 
 GameManager="*res://scripts/GameManager.gd"
-ParamStore="*res://scripts/ParamStore.gd"
 StudentDB="*res://scripts/StudentDB.gd"
-MissionManager="*res://scripts/MissionManager.gd"
 SaveManager="*res://scripts/SaveManager.gd"
+CharacterState="*res://scripts/CharacterState.gd"
+FriendshipManager="*res://scripts/FriendshipManager.gd"
+LessonManager="*res://scripts/LessonManager.gd"
+FulfillmentCalc="*res://scripts/FulfillmentCalc.gd"
+AbilityEngine="*res://scripts/AbilityEngine.gd"
 
 [display]
 

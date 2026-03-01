@@ -3,355 +3,300 @@
 ## 日次ループ・フェーズ遷移・エンディング判定を管理する。
 extends Node
 
-# ゲームフェーズ
 enum Phase {
 	TITLE,
-	PLAYER_SETUP, # 主人公設定（名前・性別・席）
-	HOMEROOM,    # 朝のホームルーム（転校生が来る）
-	PLACEMENT,   # 席配置（ドラッグ&ドロップ）
-	DAY_RESULT,  # 放課後結果（日記形式）
-	MISSION,     # ミッション進捗確認
-	ENDING       # エンディング
+	PLAYER_SETUP,  # 主人公設定
+	START_PHASE,   # 始業: 転校生ガチャ + 席配置
+	CLASS_PHASE,   # 授業: 科目発表 + テスト
+	RETURN_PHASE,  # 帰宅: 結果表示
+	ENDING
 }
 
-# ゲーム状態
 var current_phase: Phase = Phase.TITLE
 var current_day: int = 1
 const MAX_DAYS: int = 30
 
-# 現在の転校生（今日の抽選結果）
-var today_student: Dictionary = {}
-
-# 席替えチケット枚数（初期0、最大3）
-var swap_tickets: int = 0
-const MAX_SWAP_TICKETS: int = 3
-
-# 周回数（ローグライト）
 var current_cycle: int = 1
 
-# 既出学生IDリスト（重複抽選抑制用）
-var placed_student_ids: Array = []
+# 今日の転校生（ガチャ結果）
+var today_student: Dictionary = {}
 
-# 主人公データ
+# 当日パイプライン結果（ResultPresenterに渡す）
+var last_day_result: Dictionary = {}
+
+# プレイヤーデータ
 var player_name: String = "主人公"
 var player_gender: String = "female"
 var player_seat: int = -1
+var player_type: String = "futsu"
+var player_like_type: String = ""
+var player_dislike_type: String = ""
 
-# 週間イベントデータ
-var _event_defs: Array = []
+# 初期クラスメイト配置定義
+const INITIAL_STUDENTS: Array = [
+	{"id": "student_rina",  "seat": 0},
+	{"id": "student_kenta", "seat": 3},
+	{"id": "student_haru",  "seat": 12}
+]
 
 # シグナル
 signal phase_changed(new_phase: Phase)
 signal day_advanced(day: int)
 signal student_drawn(student_data: Dictionary)
-signal event_triggered(event_data: Dictionary)
 signal ending_reached(ending_id: String)
-signal swap_ticket_changed(count: int)
 signal cinematic_requested(scene_id: String)
 
-func _ready() -> void:
-	_load_events()
-
-## 主人公設定フェーズへ移行する（タイトル→PlayerSetup）
+## タイトル→PlayerSetup
 func go_to_player_setup() -> void:
 	_change_phase(Phase.PLAYER_SETUP)
 
-## 主人公設定完了：シネマティックを要求する
-func complete_player_setup(name: String, gender: String, seat: int) -> void:
-	player_name = name
-	player_gender = gender
-	player_seat = seat
+## 主人公設定完了 → シネマティックへ
+func complete_player_setup(name: String, gender: String, p_type: String,
+		like_type: String, dislike_type: String, seat: int) -> void:
+	player_name    = name
+	player_gender  = gender
+	player_type    = p_type
+	player_like_type    = like_type
+	player_dislike_type = dislike_type
+	player_seat    = seat
 	cinematic_requested.emit("opening")
 
-## ゲームを開始する（タイトル→最初の朝ホームルームへ）
-func start_new_game() -> void:
-	current_day = 1
-	current_cycle = 1
-	swap_tickets = 0
-	placed_student_ids = []
-	today_student = {}
+## ゲーム開始（オープニングシネマティック終了後に Main.tscn から呼ばれる）
+func start_new_game(board: Node) -> void:
+	current_day    = 1
+	current_cycle  = 1
+	today_student  = {}
+	last_day_result = {}
 
-	ParamStore.reset()
-	MissionManager.reset()
+	CharacterState.reset()
+	FriendshipManager.reset()
 	StudentDB.set_cycle(current_cycle)
 
-	_change_phase(Phase.HOMEROOM)
+	# プレイヤーを CharacterState に登録
+	CharacterState.init_character("player", {
+		"gender":       player_gender,
+		"type":         player_type,
+		"like_type":    player_like_type,
+		"dislike_type": player_dislike_type,
+		"initial_study":   2,
+		"initial_sports":  2,
+		"initial_art":     2,
+		"abilities":       []
+	})
+	FriendshipManager.init_for_character("player", [])
+
+	# 初期クラスメイト3人を配置
+	for entry in INITIAL_STUDENTS:
+		var s_data = StudentDB.get_student_by_id(entry["id"])
+		if s_data.is_empty():
+			continue
+		board.place_student(entry["seat"], s_data)
+		_register_character(entry["id"], s_data)
+
+	# プレイヤーとの仲良し度を初期化
+	FriendshipManager.init_for_character("player", CharacterState.get_all_active_ids())
+
+	_change_phase(Phase.START_PHASE)
 	_begin_day()
 
-## 翌日へ進む
-func advance_to_next_day() -> void:
+## 転校生配置後 → 授業フェーズへ
+## placed_new: 今日の転校生を盤面に配置した場合 true
+func go_to_class_phase(board: Node, placed_new: bool) -> void:
+	if placed_new and not today_student.is_empty():
+		var s_id = today_student.get("id", "")
+		if s_id != "" and not CharacterState.get_state(s_id).has("study"):
+			_register_character(s_id, today_student)
+			FriendshipManager.init_for_character("player", CharacterState.get_all_active_ids())
+	_change_phase(Phase.CLASS_PHASE)
+
+## 日次処理パイプライン実行 → 帰宅フェーズへ（CLASS_PHASE から呼ぶ）
+func advance_day(board: Node) -> void:
+	last_day_result = _run_daily_pipeline(board)
+	if current_phase != Phase.ENDING:
+		_change_phase(Phase.RETURN_PHASE)
+
+## 翌日へ（RETURN_PHASE 確認後に呼ぶ）
+func next_day() -> void:
 	current_day += 1
 	day_advanced.emit(current_day)
-
-	# 5日ごとにボーナスチケット
-	if current_day % 5 == 0:
-		_grant_swap_ticket()
-
-	# 週1でサブミッション抽選（7日ごと）
-	if current_day % 7 == 1 and current_day > 1:
-		MissionManager.assign_sub_mission()
-
 	if current_day > MAX_DAYS:
 		_trigger_ending()
 		return
-
-	_change_phase(Phase.HOMEROOM)
+	_change_phase(Phase.START_PHASE)
 	_begin_day()
 
-## 配置フェーズへ進む（転校生カードを確認後）
-func go_to_placement() -> void:
-	_change_phase(Phase.PLACEMENT)
-
-## 配置完了：放課後結果フェーズへ（boardが渡される）
-func complete_placement(board: Node) -> void:
-	# 効果パイプラインを実行
-	var effect_engine = _get_effect_engine()
-	if effect_engine:
-		effect_engine.evaluate_and_apply(board)
-
-	# 隠し特性のチェック（reveal_day 到達チェック）
-	_check_hidden_traits(board)
-
-	# 週間イベントのチェック
-	_check_weekly_events(board)
-
-	# ミッションチェック
-	MissionManager.check_main_missions(current_day, board)
-	MissionManager.check_sub_mission(board)
-
-	# 自動セーブ
-	SaveManager.save_game(board)
-
-	_change_phase(Phase.DAY_RESULT)
-
-## ミッション確認フェーズへ
-func go_to_mission() -> void:
-	_change_phase(Phase.MISSION)
-
-## 席替えチケットを使用する（1枚消費）
-func use_swap_ticket() -> bool:
-	if swap_tickets <= 0:
-		return false
-	swap_tickets -= 1
-	swap_ticket_changed.emit(swap_tickets)
-	return true
-
-## 席替えチケットを獲得する
-func grant_swap_ticket_public() -> void:
-	_grant_swap_ticket()
-
-## セーブデータ用辞書を返す
-func get_save_data() -> Dictionary:
-	return {
-		"current_day": current_day,
-		"current_cycle": current_cycle,
-		"swap_tickets": swap_tickets,
-		"placed_student_ids": placed_student_ids.duplicate(),
-		"player_name": player_name,
-		"player_gender": player_gender,
-		"player_seat": player_seat
-	}
-
-## セーブデータから復元する
-func load_save_data(data: Dictionary) -> void:
-	current_day = data.get("current_day", 1)
-	current_cycle = data.get("current_cycle", 1)
-	swap_tickets = data.get("swap_tickets", 0)
-	placed_student_ids = data.get("placed_student_ids", []).duplicate()
-	player_name = data.get("player_name", "主人公")
-	player_gender = data.get("player_gender", "female")
-	player_seat = data.get("player_seat", -1)
-	StudentDB.set_cycle(current_cycle)
-
-## 新規ゲーム（デバッグ用リセット）
-func reset_and_start() -> void:
-	SaveManager.delete_save()
-	start_new_game()
-
-## タイトルに戻るリセット（デバッグボタン用）
+## デバッグ: タイトルリセット
 func reset_to_title() -> void:
 	SaveManager.delete_save()
-	current_day = 1
-	current_cycle = 1
-	swap_tickets = 0
-	placed_student_ids = []
-	today_student = {}
-	ParamStore.reset()
-	MissionManager.reset()
+	current_day    = 1
+	current_cycle  = 1
+	today_student  = {}
+	last_day_result = {}
+	player_name    = "主人公"
+	player_gender  = "female"
+	player_seat    = -1
+	player_type    = "futsu"
+	player_like_type    = ""
+	player_dislike_type = ""
+	CharacterState.reset()
+	FriendshipManager.reset()
 	StudentDB.set_cycle(1)
 	_change_phase(Phase.TITLE)
+
+# --- セーブ/ロード ---
+
+func get_save_data() -> Dictionary:
+	return {
+		"current_day":          current_day,
+		"current_cycle":        current_cycle,
+		"player_name":          player_name,
+		"player_gender":        player_gender,
+		"player_seat":          player_seat,
+		"player_type":          player_type,
+		"player_like_type":     player_like_type,
+		"player_dislike_type":  player_dislike_type
+	}
+
+func load_save_data(data: Dictionary) -> void:
+	current_day          = data.get("current_day", 1)
+	current_cycle        = data.get("current_cycle", 1)
+	player_name          = data.get("player_name", "主人公")
+	player_gender        = data.get("player_gender", "female")
+	player_seat          = data.get("player_seat", -1)
+	player_type          = data.get("player_type", "futsu")
+	player_like_type     = data.get("player_like_type", "")
+	player_dislike_type  = data.get("player_dislike_type", "")
+	StudentDB.set_cycle(current_cycle)
 
 # --- Private ---
 
 func _begin_day() -> void:
-	# 今日の転校生を抽選
-	today_student = StudentDB.draw_random_student(placed_student_ids)
+	var placed_ids = CharacterState.get_all_active_ids()
+	today_student = StudentDB.draw_random_student(placed_ids)
 	student_drawn.emit(today_student)
 
-func _change_phase(new_phase: Phase) -> void:
-	current_phase = new_phase
-	phase_changed.emit(new_phase)
+func _register_character(char_id: String, master_data: Dictionary) -> void:
+	CharacterState.init_character(char_id, master_data)
+	FriendshipManager.init_for_character(char_id, CharacterState.get_all_active_ids())
 
-func _grant_swap_ticket() -> void:
-	swap_tickets = min(swap_tickets + 1, MAX_SWAP_TICKETS)
-	swap_ticket_changed.emit(swap_tickets)
+func _run_daily_pipeline(board: Node) -> Dictionary:
+	var result = {
+		"day":               current_day,
+		"subject":           "",
+		"is_test":           false,
+		"test_results":      {},
+		"ability_log":       [],
+		"fulfillment_deltas": {},
+		"transfers":         []
+	}
 
-# 隠し特性のreveal_day チェック
-func _check_hidden_traits(board: Node) -> void:
+	# Step 1: 科目決定
+	var subject  = LessonManager.pick_subject()
+	var is_test  = LessonManager.is_test_day(current_day)
+	result["subject"] = subject
+	result["is_test"]  = is_test
+
+	# Step 2: 全キャラに授業効果（充実度10以上は×2）
+	for char_id in CharacterState.get_all_active_ids():
+		var fulfillment = CharacterState.get_state(char_id).get("fulfillment", 0)
+		var mult = 2 if fulfillment >= 10 else 1
+		CharacterState.apply_param_delta(char_id, subject, mult)
+
+	# Step 3: 好き/嫌いタイプによる仲良し度変動
+	_apply_like_dislike(board)
+
+	# Step 4: 特殊能力適用
+	result["ability_log"] = AbilityEngine.apply_all_abilities(board)
+
+	# Step 5: 充実度を集計して適用
+	var f_deltas: Dictionary = {}
+	for char_id in CharacterState.get_all_active_ids():
+		var delta = FulfillmentCalc.calc_daily_fulfillment_delta(char_id)
+		CharacterState.apply_fulfillment_delta(char_id, delta)
+		f_deltas[char_id] = delta
+	result["fulfillment_deltas"] = f_deltas
+
+	# Step 6: テスト日なら判定・反映
+	if is_test:
+		var test_results: Dictionary = {}
+		var passing = LessonManager.get_passing_score(current_day)
+		for char_id in CharacterState.get_all_active_ids():
+			var passed = LessonManager.evaluate_test_for_char(char_id, subject, current_day)
+			FulfillmentCalc.apply_test_result(char_id, passed)
+			test_results[char_id] = passed
+		result["test_results"] = test_results
+
+	# Step 7: 転校判定（充実度≤-10のキャラを退場）
+	var transfers = FulfillmentCalc.get_transfer_candidates("player")
+	for char_id in transfers:
+		var seat = _find_seat_for(board, char_id)
+		if seat >= 0:
+			board.remove_student(seat)
+		CharacterState.remove_character(char_id)
+		FriendshipManager.remove_character(char_id)
+	result["transfers"] = transfers
+
+	# Step 8: エンディング判定
+	if current_day >= MAX_DAYS:
+		_trigger_ending()
+	else:
+		# Step 9: セーブ
+		SaveManager.save_game(board)
+
+	return result
+
+func _apply_like_dislike(board: Node) -> void:
 	for entry in board.get_all_placed():
-		var student = entry["student_data"]
-		var hidden = student.get("hidden_trait", null)
-		if hidden == null:
+		var char_id = entry["student_data"].get("id", "")
+		if char_id == "":
 			continue
+		var state    = CharacterState.get_state(char_id)
+		var like_t   = state.get("like_type", "")
+		var dislike_t = state.get("dislike_type", "")
 
-		var placed_day = student.get("_placed_day", current_day)
-		var days_placed = current_day - placed_day
-		var reveal_day = hidden.get("reveal_day", 999)
+		for other_entry in board.get_all_placed():
+			var other_id = other_entry["student_data"].get("id", "")
+			if other_id == "" or other_id == char_id:
+				continue
+			var other_type = CharacterState.get_state(other_id).get("type", "")
+			if like_t != "" and other_type == like_t:
+				FriendshipManager.apply_friendship_delta(char_id, other_id, 1)
+			if dislike_t != "" and other_type == dislike_t:
+				FriendshipManager.apply_friendship_delta(char_id, other_id, -1)
 
-		if days_placed >= reveal_day and not student.get("_hidden_revealed", false):
-			_apply_hidden_trait(board, entry["seat_index"], student, hidden)
+	# プレイヤーの like/dislike も適用
+	for entry in board.get_all_placed():
+		var other_id   = entry["student_data"].get("id", "")
+		if other_id == "":
+			continue
+		var other_type = CharacterState.get_state(other_id).get("type", "")
+		if player_like_type != "" and other_type == player_like_type:
+			FriendshipManager.apply_friendship_delta("player", other_id, 1)
+		if player_dislike_type != "" and other_type == player_dislike_type:
+			FriendshipManager.apply_friendship_delta("player", other_id, -1)
 
-# 隠し特性を適用する
-func _apply_hidden_trait(board: Node, seat_index: int, student: Dictionary, hidden: Dictionary) -> void:
-	var override = hidden.get("effect_override", {})
-
-	# base_params_delta を反映
-	var bp_delta = override.get("base_params_delta", {})
-	if not bp_delta.is_empty():
-		ParamStore.apply_deltas(bp_delta)
-
-	# 学生データの_hidden_revealed フラグを設定
-	student["_hidden_revealed"] = true
-
-	# 追加エフェクトを学生データにマージ（次回評価から有効）
-	var add_effects = override.get("add_effects", [])
-	var effects = student.get("effects", [])
-	effects.append_array(add_effects)
-	student["effects"] = effects
-
-	# 削除エフェクトを除去
-	var remove_ids = override.get("remove_effects", [])
-	student["effects"] = effects.filter(func(e): return not (e["effect_id"] in remove_ids))
-
-func _check_weekly_events(board: Node) -> void:
-	if _event_defs.is_empty():
-		return
-
-	for event in _event_defs:
-		if _should_trigger_event(event, board):
-			_execute_event(event, board)
-			event_triggered.emit(event)
-			break  # 1日1イベントまで
-
-func _should_trigger_event(event: Dictionary, board: Node) -> bool:
-	var trigger = event.get("trigger", {})
-	match trigger.get("type", ""):
-		"fixed_day":
-			return current_day == trigger.get("day", -1)
-		"random":
-			var min_day = trigger.get("min_day", 0)
-			var prob = trigger.get("probability_per_day", 0.0)
-			return current_day >= min_day and randf() < prob
-		"param_threshold":
-			var param = trigger.get("param", "")
-			var operator = trigger.get("operator", "<")
-			var value = trigger.get("value", 0)
-			var current = ParamStore.get_param(param)
-			match operator:
-				"<": return current < value
-				">=": return current >= value
-		"board_condition":
-			var category = trigger.get("category", "")
-			var count_min = trigger.get("count_min", 0)
-			var min_day = trigger.get("min_day", 0)
-			if current_day < min_day:
-				return false
-			var count = 0
-			for entry in board.get_all_placed():
-				if entry["student_data"].get("category", "") == category:
-					count += 1
-			return count >= count_min
-		"day_range":
-			var start = trigger.get("start", 0)
-			var end = trigger.get("end", 999)
-			return current_day >= start and current_day <= end
-	return false
-
-func _execute_event(event: Dictionary, board: Node) -> void:
-	var effect = event.get("effect", {})
-	match effect.get("type", ""):
-		"shuffle_seats":
-			var count = effect.get("count", 2)
-			var placed = board.get_all_placed()
-			placed.shuffle()
-			for i in range(min(count, placed.size() - 1)):
-				board.swap_seats(placed[i]["seat_index"], placed[i + 1]["seat_index"])
-		"remove_random_student":
-			var placed = board.get_all_placed()
-			if not placed.is_empty():
-				var idx = randi() % placed.size()
-				board.remove_student(placed[idx]["seat_index"])
-		"param_change":
-			ParamStore.apply_deltas(effect.get("changes", {}))
+func _find_seat_for(board: Node, char_id: String) -> int:
+	for entry in board.get_all_placed():
+		if entry["student_data"].get("id", "") == char_id:
+			return entry["seat_index"]
+	return -1
 
 func _trigger_ending() -> void:
 	var ending_id = _determine_ending()
 	_change_phase(Phase.ENDING)
 	ending_reached.emit(ending_id)
 
-# エンディング判定ロジック（要件書 §11）
 func _determine_ending() -> String:
-	var params = ParamStore.get_all_params()
-	var flags = MissionManager.get_ending_flags()
+	var fulfillment = CharacterState.get_state("player").get("fulfillment", 0)
+	if fulfillment >= 30:
+		return "true_ending"
+	elif fulfillment >= 10:
+		return "normal_ending"
+	elif fulfillment >= -9:
+		return "plain_ending"
+	else:
+		return "bad_ending"
 
-	var study = params.get("study", 0)
-	var romance = params.get("romance", 0)
-	var friendship = params.get("friendship", 0)
-	var popularity = params.get("popularity", 0)
-	var happening = params.get("happening", 0)
-
-	# ★ 伝説の学園生活
-	if study >= 60 and romance >= 50 and friendship >= 60 and popularity >= 50 and happening >= 60:
-		if MissionManager.completed_missions.size() >= 4:
-			return "legendary"
-
-	# ★ 青春フルコース
-	if study >= 40 and romance >= 35 and friendship >= 40 and popularity >= 35:
-		return "full_youth"
-
-	# 恋愛エンド
-	if romance >= 50 and romance > study and romance > friendship:
-		return "romance"
-
-	# ガリ勉エンド
-	if study >= 50 and friendship < 20:
-		return "studious"
-
-	# ムードメーカーエンド
-	if happening >= 50 and happening > study and happening > romance:
-		return "mood_maker"
-
-	# ぼっちエンド
-	if friendship < 15:
-		return "loner"
-
-	# もう一度、この教室で
-	return "restart"
-
-func _load_events() -> void:
-	var path = "res://data/events.json"
-	if not FileAccess.file_exists(path):
-		return
-
-	var file = FileAccess.open(path, FileAccess.READ)
-	var json = JSON.new()
-	if json.parse(file.get_as_text()) == OK:
-		_event_defs = json.get_data().get("weekly_events", [])
-	file.close()
-
-func _get_effect_engine() -> Node:
-	# Classroomシーンが持つEffectEngineを取得
-	var classroom = get_tree().get_first_node_in_group("classroom")
-	if classroom and classroom.has_node("EffectEngine"):
-		return classroom.get_node("EffectEngine")
-	return null
+func _change_phase(new_phase: Phase) -> void:
+	current_phase = new_phase
+	phase_changed.emit(new_phase)

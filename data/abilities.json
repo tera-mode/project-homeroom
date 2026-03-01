@@ -1,0 +1,99 @@
+{
+  "abilities": [
+    {
+      "ability_id": "oshietari",
+      "name": "教えたがり",
+      "description": "左右のキャラの勉強を毎日+1する",
+      "icon": "💡",
+      "effects": [
+        { "scope": "left_right", "effect_type": "param", "target_param": "study", "delta": 1 }
+      ]
+    },
+    {
+      "ability_id": "happoubijin",
+      "name": "八方美人",
+      "description": "周囲8マスのキャラの自分への仲良し度を毎日+1する",
+      "icon": "😊",
+      "effects": [
+        { "scope": "surrounding", "effect_type": "friendship", "direction": "to_me", "delta": 1 }
+      ]
+    },
+    {
+      "ability_id": "owaraiger",
+      "name": "お笑い芸人",
+      "description": "上下左右のキャラの勉強-1、上下左右のキャラの自分への仲良し度+1",
+      "icon": "😂",
+      "effects": [
+        { "scope": "orthogonal", "effect_type": "param", "target_param": "study", "delta": -1 },
+        { "scope": "orthogonal", "effect_type": "friendship", "direction": "to_me", "delta": 1 }
+      ]
+    },
+    {
+      "ability_id": "coach",
+      "name": "コーチ",
+      "description": "左に座ったキャラの運動を毎日+2する",
+      "icon": "🏃",
+      "effects": [
+        { "scope": "left_only", "effect_type": "param", "target_param": "sports", "delta": 2 }
+      ]
+    },
+    {
+      "ability_id": "geijutsuka",
+      "name": "芸術家",
+      "description": "右に座ったキャラの芸術を毎日+2する",
+      "icon": "🎨",
+      "effects": [
+        { "scope": "right_only", "effect_type": "param", "target_param": "art", "delta": 2 }
+      ]
+    },
+    {
+      "ability_id": "bully",
+      "name": "いじめっ子",
+      "description": "上下左右のキャラの自分への仲良し度を毎日-2する",
+      "icon": "😤",
+      "effects": [
+        { "scope": "orthogonal", "effect_type": "friendship", "direction": "to_me", "delta": -2 }
+      ]
+    },
+    {
+      "ability_id": "idol",
+      "name": "アイドル",
+      "description": "周囲8マスの仲良し度+2、同範囲の勉強-1",
+      "icon": "⭐",
+      "effects": [
+        { "scope": "surrounding", "effect_type": "friendship", "direction": "to_me", "delta": 2 },
+        { "scope": "surrounding", "effect_type": "param", "target_param": "study", "delta": -1 }
+      ]
+    },
+    {
+      "ability_id": "leader",
+      "name": "リーダー",
+      "description": "同じ列の全キャラの充実度を毎日+1する",
+      "icon": "👑",
+      "effects": [
+        { "scope": "same_col", "effect_type": "fulfillment", "delta": 1 }
+      ]
+    },
+    {
+      "ability_id": "tensai",
+      "name": "天才",
+      "description": "自分の勉強・運動・芸術を毎日+1する",
+      "icon": "🌟",
+      "effects": [
+        { "scope": "self", "effect_type": "param", "target_param": "study",  "delta": 1 },
+        { "scope": "self", "effect_type": "param", "target_param": "sports", "delta": 1 },
+        { "scope": "self", "effect_type": "param", "target_param": "art",    "delta": 1 }
+      ]
+    },
+    {
+      "ability_id": "hikikomori",
+      "name": "引きこもり",
+      "description": "自分の充実度-1、自分の勉強+2",
+      "icon": "🏠",
+      "effects": [
+        { "scope": "self", "effect_type": "fulfillment", "delta": -1 },
+        { "scope": "self", "effect_type": "param", "target_param": "study", "delta": 2 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+[gd_scene load_steps=2 format=3 uid="uid://result_presenter_scene"]
+
+[sub_resource type="GDScript" id="GDScript_result"]
+script/source = "## ResultPresenter.tscn のスクリプト
+## 帰宅フェーズ: 日次処理結果をステップバイステップで表示する
+extends Control
+
+const COLOR_TEXT_MAIN = Color(0.227, 0.165, 0.102)
+const COLOR_TEXT_SUB  = Color(0.478, 0.416, 0.353)
+const COLOR_PLUS      = Color(0.220, 0.580, 0.235)
+const COLOR_MINUS     = Color(0.820, 0.200, 0.200)
+
+const SUBJECT_ICONS = { 'study': '📚 勉強', 'sports': '⚽ 運動', 'art': '🎨 芸術' }
+
+var _step: int = 0
+var _steps: Array = []
+
+func _ready() -> void:
+	_apply_dark_theme()
+	GameManager.phase_changed.connect(_on_phase_changed)
+	_build_ui()
+
+func _apply_dark_theme() -> void:
+	var theme = Theme.new()
+	theme.set_color('font_color', 'Label', COLOR_TEXT_MAIN)
+	theme.set_color('default_color', 'RichTextLabel', COLOR_TEXT_MAIN)
+	self.theme = theme
+
+func _build_ui() -> void:
+	var overlay = ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.5)
+	overlay.anchor_right = 1.0
+	overlay.anchor_bottom = 1.0
+	add_child(overlay)
+
+	var card = Panel.new()
+	card.name = 'DiaryCard'
+	card.position = Vector2(180, 50)
+	card.size = Vector2(920, 580)
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.980, 0.984, 0.941)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.816, 0.847, 0.753)
+	style.corner_radius_top_left = 16
+	style.corner_radius_top_right = 16
+	style.corner_radius_bottom_left = 16
+	style.corner_radius_bottom_right = 16
+	style.shadow_color = Color(0, 0, 0, 0.25)
+	style.shadow_size = 8
+	card.add_theme_stylebox_override('panel', style)
+	add_child(card)
+
+	var vbox = VBoxContainer.new()
+	vbox.name = 'VBox'
+	vbox.position = Vector2(48, 36)
+	vbox.size = Vector2(824, 508)
+	vbox.add_theme_constant_override('separation', 12)
+	card.add_child(vbox)
+
+	# 日付
+	var day_row = HBoxContainer.new()
+	vbox.add_child(day_row)
+	var icon_lbl = Label.new()
+	icon_lbl.text = '📓'
+	icon_lbl.add_theme_font_size_override('font_size', 18)
+	day_row.add_child(icon_lbl)
+	var day_lbl = Label.new()
+	day_lbl.name = 'DayLabel'
+	day_lbl.add_theme_font_size_override('font_size', 16)
+	day_lbl.add_theme_color_override('font_color', COLOR_TEXT_SUB)
+	day_row.add_child(day_lbl)
+
+	# ステップ見出し
+	var step_lbl = Label.new()
+	step_lbl.name = 'StepLabel'
+	step_lbl.add_theme_font_size_override('font_size', 22)
+	step_lbl.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
+	step_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(step_lbl)
+
+	var sep = HSeparator.new()
+	vbox.add_child(sep)
+
+	# ステップ本文
+	var content_lbl = RichTextLabel.new()
+	content_lbl.name = 'ContentLabel'
+	content_lbl.add_theme_font_size_override('normal_font_size', 15)
+	content_lbl.add_theme_color_override('default_color', COLOR_TEXT_MAIN)
+	content_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content_lbl.bbcode_enabled = true
+	content_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+	vbox.add_child(content_lbl)
+
+	# ステップ表示（ドット）
+	var dot_row = HBoxContainer.new()
+	dot_row.name = 'DotRow'
+	dot_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(dot_row)
+
+	# 次へボタン
+	var next_btn = Button.new()
+	next_btn.name = 'NextButton'
+	next_btn.text = '次へ →'
+	next_btn.add_theme_font_size_override('font_size', 16)
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.290, 0.565, 0.851)
+	btn_style.corner_radius_top_left = 10
+	btn_style.corner_radius_top_right = 10
+	btn_style.corner_radius_bottom_left = 10
+	btn_style.corner_radius_bottom_right = 10
+	next_btn.add_theme_stylebox_override('normal', btn_style)
+	next_btn.add_theme_color_override('font_color', Color.WHITE)
+	next_btn.pressed.connect(_on_next_pressed)
+	vbox.add_child(next_btn)
+
+func _on_phase_changed(phase: GameManager.Phase) -> void:
+	if phase != GameManager.Phase.RETURN_PHASE:
+		return
+	visible = true
+	_build_steps()
+	_step = 0
+	_show_current_step()
+	_animate_in()
+
+func _build_steps() -> void:
+	var r = GameManager.last_day_result
+	_steps = []
+
+	# Step 1: 授業
+	var subject = r.get('subject', 'study')
+	var is_test  = r.get('is_test', false)
+	_steps.append({
+		'title': '📚 今日の授業',
+		'body': SUBJECT_ICONS.get(subject, subject) + ' の授業が行われた。' +
+			('\\n\\n[color=#e8c840]📝 今日はテスト日！[/color]' if is_test else '')
+	})
+
+	# Step 2: テスト結果（テスト日のみ）
+	if is_test:
+		var test_results = r.get('test_results', {})
+		var lines = []
+		for char_id in test_results:
+			var state = CharacterState.get_state(char_id)
+			var name_str = StudentDB.get_student_by_id(char_id).get('name', char_id)
+			var passed = test_results[char_id]
+			var color = '#3ab03e' if passed else '#cc3333'
+			lines.append('[color=%s]%s: %s[/color]' % [color, name_str, 'クリア ✓' if passed else '赤点 ✗'])
+		_steps.append({
+			'title': '📝 テスト結果',
+			'body': '\\n'.join(lines) if lines else 'テスト対象者なし'
+		})
+
+	# Step 3: 特殊能力ログ
+	var ability_log = r.get('ability_log', [])
+	if not ability_log.is_empty():
+		var lines = []
+		for entry in ability_log:
+			var actor = StudentDB.get_student_by_id(entry.get('actor', '')).get('name', entry.get('actor', ''))
+			lines.append('[b]%s[/b] の [color=#7a4aab]%s[/color]: %s' % [actor, entry.get('ability_name', ''), entry.get('effect_desc', '')])
+		_steps.append({
+			'title': '✨ 特殊能力の効果',
+			'body': '\\n'.join(lines)
+		})
+
+	# Step 4: 充実度変動
+	var f_deltas = r.get('fulfillment_deltas', {})
+	if not f_deltas.is_empty():
+		var lines = []
+		for char_id in f_deltas:
+			var delta = f_deltas[char_id]
+			if delta == 0:
+				continue
+			var name_str = ('あなた' if char_id == 'player'
+				else StudentDB.get_student_by_id(char_id).get('name', char_id))
+			var sign  = '+' if delta > 0 else ''
+			var color = '#3ab03e' if delta > 0 else '#cc3333'
+			var cur_f = CharacterState.get_state(char_id).get('fulfillment', 0)
+			lines.append('[color=%s]%s: %s%d (現在 %d)[/color]' % [color, name_str, sign, delta, cur_f])
+		_steps.append({
+			'title': '💫 充実度の変化',
+			'body': '\\n'.join(lines) if lines else '大きな変化はなかった'
+		})
+
+	# Step 5: 転校
+	var transfers = r.get('transfers', [])
+	if not transfers.is_empty():
+		var names = []
+		for char_id in transfers:
+			names.append(StudentDB.get_student_by_id(char_id).get('name', char_id))
+		_steps.append({
+			'title': '😢 転校',
+			'body': '、'.join(names) + ' が転校していった…'
+		})
+
+	# 最後: 翌日へ
+	_steps.append({
+		'title': '🌙 今日もお疲れ様',
+		'body': '%d日目が終わった。\\n明日も頑張ろう。' % r.get('day', GameManager.current_day)
+	})
+
+func _show_current_step() -> void:
+	if _step >= _steps.size():
+		return
+	var step_data = _steps[_step]
+	var card = get_node_or_null('DiaryCard')
+	if card == null:
+		return
+
+	var day_lbl = card.get_node_or_null('VBox/HBoxContainer/DayLabel')
+	if day_lbl:
+		day_lbl.text = '  %d日目の放課後' % GameManager.current_day
+
+	var step_lbl = card.get_node_or_null('VBox/StepLabel')
+	if step_lbl:
+		step_lbl.text = step_data.get('title', '')
+
+	var content_lbl = card.get_node_or_null('VBox/ContentLabel')
+	if content_lbl:
+		content_lbl.text = step_data.get('body', '')
+
+	var next_btn = card.get_node_or_null('VBox/NextButton')
+	if next_btn:
+		var is_last = (_step == _steps.size() - 1)
+		next_btn.text = '📖 次の日へ →' if is_last else '次へ →'
+
+	# ドット更新
+	var dot_row = card.get_node_or_null('VBox/DotRow')
+	if dot_row:
+		for child in dot_row.get_children():
+			child.queue_free()
+		for i in range(_steps.size()):
+			var dot = Label.new()
+			dot.text = '●' if i == _step else '○'
+			dot.add_theme_font_size_override('font_size', 10)
+			dot.add_theme_color_override('font_color', Color(0.290, 0.565, 0.851) if i == _step else COLOR_TEXT_SUB)
+			dot_row.add_child(dot)
+
+func _on_next_pressed() -> void:
+	_step += 1
+	if _step >= _steps.size():
+		visible = false
+		GameManager.next_day()
+	else:
+		_show_current_step()
+
+func _animate_in() -> void:
+	modulate.a = 0.0
+	var card = get_node_or_null('DiaryCard')
+	if card:
+		card.position.y += 40
+		var tween = create_tween()
+		tween.tween_property(card, 'position:y', card.position.y - 40, 0.4).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tween.parallel().tween_property(self, 'modulate:a', 1.0, 0.3)
+"
+
+[node name="ResultPresenter" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = SubResource("GDScript_result")
