@@ -1,0 +1,184 @@
+[gd_scene load_steps=2 format=3 uid="uid://title_screen_scene"]
+
+[sub_resource type="GDScript" id="GDScript_title"]
+script/source = "## TitleScreen.tscn のスクリプト
+## タイトル画面。ゲーム開始・コンティニューを選択する。
+extends Control
+
+const COLOR_TEXT_MAIN = Color(0.227, 0.165, 0.102)
+const COLOR_TEXT_SUB  = Color(0.478, 0.416, 0.353)
+
+func _ready() -> void:
+	_build_ui()
+
+func _build_ui() -> void:
+	# 背景画像
+	var bg = ColorRect.new()
+	bg.color = Color(0.96, 0.95, 0.88)
+	bg.anchor_right = 1.0
+	bg.anchor_bottom = 1.0
+	add_child(bg)
+
+	var bg_path = 'res://assets/backgrounds/title_bg.png'
+	var bg_tex_data = _load_texture(bg_path)
+	if bg_tex_data:
+		var bg_tex = TextureRect.new()
+		bg_tex.texture = bg_tex_data
+		bg_tex.anchor_right = 1.0
+		bg_tex.anchor_bottom = 1.0
+		bg_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		add_child(bg_tex)
+
+	# 半透明オーバーレイ（文字が読めるように）
+	var overlay = ColorRect.new()
+	overlay.color = Color(0.98, 0.97, 0.90, 0.7)
+	overlay.anchor_right = 1.0
+	overlay.anchor_bottom = 1.0
+	add_child(overlay)
+
+	# キャラクターたちの小さいスプライト（横並び）
+	var chars_container = HBoxContainer.new()
+	chars_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	chars_container.add_theme_constant_override('separation', -10)
+	chars_container.anchor_left = 0.5
+	chars_container.anchor_right = 0.5
+	chars_container.position = Vector2(-300, 360)
+	chars_container.size = Vector2(600, 120)
+	add_child(chars_container)
+
+	var student_ids = ['student_rina', 'student_kenta', 'student_ren', 'student_haru', 'student_zero']
+	for sid in student_ids:
+		var sprite_path = 'res://assets/sprites/' + sid + '_48x48.png'
+		var sprite_tex = _load_texture(sprite_path)
+		if sprite_tex:
+			var tex = TextureRect.new()
+			tex.texture = sprite_tex
+			tex.custom_minimum_size = Vector2(100, 100)
+			tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tex.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+			chars_container.add_child(tex)
+
+	# メインコンテナ
+	var center = CenterContainer.new()
+	center.anchor_right = 1.0
+	center.anchor_bottom = 0.55
+	add_child(center)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override('separation', 14)
+	center.add_child(vbox)
+
+	# サブタイトル
+	var sub_label = Label.new()
+	sub_label.text = '私立夕凪学園・転入自由制度'
+	sub_label.add_theme_font_size_override('font_size', 16)
+	sub_label.add_theme_color_override('font_color', COLOR_TEXT_SUB)
+	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(sub_label)
+
+	# タイトルロゴ
+	var title_label = Label.new()
+	title_label.text = '転校生ガチャ！'
+	title_label.add_theme_font_size_override('font_size', 64)
+	title_label.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title_label)
+
+	# キャッチコピー
+	var catch_label = Label.new()
+	catch_label.text = '毎日やってくる転校生を、たった16席の教室に座らせろ。'
+	catch_label.add_theme_font_size_override('font_size', 15)
+	catch_label.add_theme_color_override('font_color', COLOR_TEXT_SUB)
+	catch_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(catch_label)
+
+	# ボタンエリア
+	var btn_area = VBoxContainer.new()
+	btn_area.anchor_left = 0.35
+	btn_area.anchor_right = 0.65
+	btn_area.anchor_top = 0.62
+	btn_area.anchor_bottom = 0.88
+	btn_area.add_theme_constant_override('separation', 12)
+	add_child(btn_area)
+
+	var new_game_btn = Button.new()
+	new_game_btn.name = 'NewGameBtn'
+	new_game_btn.text = '🎓  はじめから'
+	new_game_btn.add_theme_font_size_override('font_size', 20)
+	_style_button(new_game_btn, Color(0.290, 0.565, 0.851))
+	new_game_btn.pressed.connect(_on_new_game_pressed)
+	btn_area.add_child(new_game_btn)
+
+	var continue_btn = Button.new()
+	continue_btn.name = 'ContinueBtn'
+	continue_btn.text = '📖  つづきから'
+	continue_btn.add_theme_font_size_override('font_size', 20)
+	_style_button(continue_btn, Color(0.357, 0.682, 0.369))
+	continue_btn.pressed.connect(_on_continue_pressed)
+	continue_btn.disabled = not SaveManager.has_save()
+	btn_area.add_child(continue_btn)
+
+	# バージョン
+	var ver_label = Label.new()
+	ver_label.text = 'v0.1  project-homeroom'
+	ver_label.anchor_right = 1.0
+	ver_label.anchor_bottom = 1.0
+	ver_label.offset_top = -24
+	ver_label.add_theme_font_size_override('font_size', 11)
+	ver_label.add_theme_color_override('font_color', COLOR_TEXT_SUB)
+	ver_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(ver_label)
+
+	_animate_in()
+
+func _style_button(btn: Button, color: Color) -> void:
+	var style = StyleBoxFlat.new()
+	style.bg_color = color
+	style.corner_radius_top_left = 12
+	style.corner_radius_top_right = 12
+	style.corner_radius_bottom_left = 12
+	style.corner_radius_bottom_right = 12
+	style.shadow_color = Color(0, 0, 0, 0.2)
+	style.shadow_size = 4
+	btn.add_theme_stylebox_override('normal', style)
+	var hover_style = style.duplicate()
+	hover_style.bg_color = color.lightened(0.15)
+	btn.add_theme_stylebox_override('hover', hover_style)
+	btn.add_theme_color_override('font_color', Color.WHITE)
+
+func _animate_in() -> void:
+	modulate.a = 0.0
+	var tween = create_tween()
+	tween.tween_property(self, 'modulate:a', 1.0, 0.8).set_ease(Tween.EASE_OUT)
+
+func _on_new_game_pressed() -> void:
+	var tween = create_tween()
+	tween.tween_property(self, 'modulate:a', 0.0, 0.4)
+	tween.tween_callback(func():
+		visible = false
+		GameManager.go_to_player_setup()
+	)
+
+func _on_continue_pressed() -> void:
+	if not SaveManager.has_save():
+		return
+	var tween = create_tween()
+	tween.tween_property(self, 'modulate:a', 0.0, 0.4)
+	tween.tween_callback(func():
+		visible = false
+		# ロードはMain.tscn側で処理済みのため、最後のフェーズへ遷移
+		GameManager.phase_changed.emit(GameManager.current_phase)
+	)
+
+func _load_texture(res_path: String) -> Texture2D:
+	var abs_path = ProjectSettings.globalize_path(res_path)
+	var img = Image.new()
+	if img.load(abs_path) == OK:
+		return ImageTexture.create_from_image(img)
+	return null
+"
+
+[node name="TitleScreen" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = SubResource("GDScript_title")

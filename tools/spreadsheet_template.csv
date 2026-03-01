@@ -1,0 +1,28 @@
+## Sheet 1: 転校生マスタ（students）
+## このシートを編集して csv_to_json.py を実行すると data/students.json が生成されます
+id,name,category,rarity,sprite,tags,hint_text,unlock_cycle,study,romance,friendship,popularity,happening
+student_rina,星宮リナ,idol,2,rina_48x48.png,"明るい,おしゃれ,アイドル",前の学校でも注目されてたみたい。でも本当は…,1,-1,2,0,1,0
+student_kenta,大樹ケンタ,honor,1,kenta_48x48.png,"真面目,眼鏡,地味",成績は学年トップらしいけど、なんか話しかけにくい…,1,3,-1,-1,-1,0
+student_ren,火坂レン,yankee,2,ren_48x48.png,"ヤンキー,熱血,義理人情",怖そうだけど、なんか放っておけない雰囲気がある,1,-2,0,2,1,0
+student_haru,七瀬ハル,entertainer,2,haru_48x48.png,"明るい,お笑い,エンタメ,予測不能",いつも笑わせてくれるけど、なんか計算してそうな目をしてる,1,-1,0,1,2,2
+student_zero,謎の転校生ゼロ,wildcard,3,zero_48x48.png,"謎,無口,ワイルドカード",名前も素性も不明。でもなぜかクラスが落ち着く気がする…,2,1,1,1,1,1
+
+## Sheet 2: 効果定義（effects）
+## student_idに対応するエフェクト定義。同じstudent_idの行が effects[] にまとめられます
+student_id,effect_id,type,scope,condition_json,target,param_deltas_json,flavor
+student_rina,rina_synergy_01,adjacency,orthogonal,"{""has_tag"": ""明るい""}",both,"{""popularity"": 1}",明るい子同士でキラキラオーラ発動！
+student_rina,rina_crash_01,adjacency,orthogonal,"{""has_tag"": ""地味""}",other,"{""friendship"": -1}",リナちゃんの隣はちょっと…きつい
+student_kenta,kenta_window_bonus,conditional,self,"{""seat_in"": [""window""]}",self,"{""study"": 1}",窓際で集中力UP！外の景色が頭を冷やしてくれる
+student_kenta,kenta_aura_study,aura,orthogonal,"{""always"": true}",other,"{""study"": 1}",ケンタの勉強オーラが周りにも伝染
+student_ren,ren_synergy_yankee,adjacency,orthogonal,"{""has_tag"": ""ヤンキー""}",both,"{""friendship"": 2}",義理の絆！ヤンキー同士の固い友情
+student_ren,ren_crash_honor,adjacency,orthogonal,"{""has_tag"": ""真面目""}",both,"{""friendship"": -1, ""study"": -1}",真面目とヤンキーは水と油…
+student_haru,haru_laugh_trigger,trigger,same_row,"{""always"": true}",other,"{""friendship"": 1}",ハルのギャグで同じ列が爆笑！
+student_haru,haru_chaos,aura,surrounding,"{""always"": true}",other,"{""happening"": 1}",ハプニングメーカー。近くにいると何かが起きる
+student_zero,zero_random_daily,trigger,board_wide,"{""always"": true}",other,"{""happening"": 0}",ゼロがいると毎日何かが起きる
+
+## Sheet 3: 隠し特性（hidden_traits）
+## student_idに対応する隠し特性。hidden_trait フィールドに挿入されます
+student_id,reveal_day,description,base_params_delta_json,add_effects_json,remove_effects_json
+student_rina,3,実は勉強が得意だった,"{""study"": 2}","[]","[]"
+student_ren,3,実は寂しがり屋だった,"{""friendship"": 1}","[{""effect_id"": ""ren_lonely_reveal"", ""type"": ""adjacency"", ""trigger"": {""scope"": ""orthogonal"", ""condition"": {""always"": true}}, ""apply"": {""target"": ""self"", ""param_deltas"": {""friendship"": 1}}, ""flavor"": ""孤独は嫌だ…そう気づいたレンは変わった""}]","[""ren_crash_honor""]"
+student_zero,3,本当の姿が明らかに…,"{""study"": 1, ""romance"": 1, ""friendship"": 1, ""popularity"": 1, ""happening"": 2}","[{""effect_id"": ""zero_true_aura"", ""type"": ""aura"", ""trigger"": {""scope"": ""board_wide"", ""condition"": {""always"": true}}, ""apply"": {""target"": ""other"", ""param_deltas"": {""happening"": 1}}, ""flavor"": ""ゼロの正体が明かされ、クラス全体が揺れる！""}]","[""zero_random_daily""]"

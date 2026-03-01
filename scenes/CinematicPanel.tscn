@@ -1,0 +1,289 @@
+[gd_scene load_steps=2 format=3 uid="uid://cinematic_panel_scene"]
+
+[sub_resource type="GDScript" id="GDScript_cinematic"]
+script/source = "## CinematicPanel.tscn のスクリプト
+## データ駆動のシネマティック会話演出システム
+extends Control
+
+signal cinematic_finished(scene_id: String)
+
+const COLOR_TEXT_MAIN = Color(0.95, 0.93, 0.88)
+const COLOR_TEXT_NAME = Color(1.0, 0.95, 0.6)
+
+var _scene_defs: Dictionary = {}
+var _current_scene_id: String = ''
+var _current_lines: Array = []
+var _current_line_index: int = 0
+var _substitutions: Dictionary = {}
+
+var _bg_image: TextureRect = null
+var _left_sprite: TextureRect = null
+var _left_name: Label = null
+var _right_sprite: TextureRect = null
+var _right_name: Label = null
+var _left_area: Control = null
+var _right_area: Control = null
+var _speaker_label: Label = null
+var _text_label: Label = null
+var _advance_hint: Label = null
+
+func _ready() -> void:
+	visible = false
+	z_index = 200
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	_load_scene_defs()
+	_build_ui()
+
+func _load_scene_defs() -> void:
+	var path = 'res://data/cinematic_scenes.json'
+	if not FileAccess.file_exists(path):
+		return
+	var file = FileAccess.open(path, FileAccess.READ)
+	var json = JSON.new()
+	if json.parse(file.get_as_text()) == OK:
+		var data = json.get_data()
+		for scene in data.get('scenes', []):
+			_scene_defs[scene['id']] = scene
+	file.close()
+
+func _build_ui() -> void:
+	# ─── 暗いオーバーレイ ───
+	var overlay = ColorRect.new()
+	overlay.anchor_right = 1.0
+	overlay.anchor_bottom = 1.0
+	overlay.color = Color(0.0, 0.0, 0.0, 0.78)
+	add_child(overlay)
+
+	# ─── 背景画像（薄く） ───
+	_bg_image = TextureRect.new()
+	_bg_image.name = 'BgImage'
+	_bg_image.anchor_right = 1.0
+	_bg_image.anchor_bottom = 1.0
+	_bg_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_bg_image.modulate.a = 0.28
+	add_child(_bg_image)
+
+	# ─── 左キャラエリア ───
+	# キャラ画像はテキストボックス上まで（anchor_bottom = 0.68）
+	_left_area = Control.new()
+	_left_area.name = 'LeftCharArea'
+	_left_area.anchor_left   = 0.02
+	_left_area.anchor_right  = 0.38
+	_left_area.anchor_top    = 0.04
+	_left_area.anchor_bottom = 0.71
+	add_child(_left_area)
+
+	_left_sprite = TextureRect.new()
+	_left_sprite.name = 'Sprite'
+	_left_sprite.anchor_left   = 0.0
+	_left_sprite.anchor_right  = 1.0
+	_left_sprite.anchor_top    = 0.0
+	_left_sprite.anchor_bottom = 0.84
+	_left_sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_left_sprite.expand_mode  = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	_left_area.add_child(_left_sprite)
+
+	# 名前ラベルは背景付きピル
+	_left_name = _make_name_label()
+	_left_name.anchor_top    = 0.86
+	_left_name.anchor_bottom = 1.0
+	_left_area.add_child(_left_name)
+
+	# ─── 右キャラエリア ───
+	_right_area = Control.new()
+	_right_area.name = 'RightCharArea'
+	_right_area.anchor_left   = 0.62
+	_right_area.anchor_right  = 0.98
+	_right_area.anchor_top    = 0.04
+	_right_area.anchor_bottom = 0.71
+	add_child(_right_area)
+
+	_right_sprite = TextureRect.new()
+	_right_sprite.name = 'Sprite'
+	_right_sprite.anchor_left   = 0.0
+	_right_sprite.anchor_right  = 1.0
+	_right_sprite.anchor_top    = 0.0
+	_right_sprite.anchor_bottom = 0.84
+	_right_sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_right_sprite.expand_mode  = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	_right_area.add_child(_right_sprite)
+
+	_right_name = _make_name_label()
+	_right_name.anchor_top    = 0.86
+	_right_name.anchor_bottom = 1.0
+	_right_area.add_child(_right_name)
+
+	# ─── テキストボックス ───
+	var text_box = Panel.new()
+	text_box.name = 'TextBox'
+	text_box.anchor_left   = 0.06
+	text_box.anchor_right  = 0.94
+	text_box.anchor_top    = 0.70
+	text_box.anchor_bottom = 0.97
+	var tb_style = StyleBoxFlat.new()
+	tb_style.bg_color = Color(0.04, 0.05, 0.14, 0.92)
+	tb_style.border_color = Color(0.45, 0.58, 0.92, 0.65)
+	tb_style.set_border_width_all(2)
+	tb_style.corner_radius_top_left    = 12
+	tb_style.corner_radius_top_right   = 12
+	tb_style.corner_radius_bottom_left = 12
+	tb_style.corner_radius_bottom_right = 12
+	text_box.add_theme_stylebox_override('panel', tb_style)
+	add_child(text_box)
+
+	# MarginContainer で内側に余白を確保（StyleBoxFlatのcontent_marginは子Controlに効かない）
+	var margin = MarginContainer.new()
+	margin.anchor_right  = 1.0
+	margin.anchor_bottom = 1.0
+	margin.add_theme_constant_override('margin_left',   22)
+	margin.add_theme_constant_override('margin_right',  22)
+	margin.add_theme_constant_override('margin_top',    14)
+	margin.add_theme_constant_override('margin_bottom', 12)
+	text_box.add_child(margin)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override('separation', 6)
+	margin.add_child(vbox)
+
+	# 発言者名（ハイライト行）
+	_speaker_label = Label.new()
+	_speaker_label.name = 'SpeakerLabel'
+	_speaker_label.add_theme_font_size_override('font_size', 15)
+	_speaker_label.add_theme_color_override('font_color', COLOR_TEXT_NAME)
+	vbox.add_child(_speaker_label)
+
+	# セリフ本文（縦に拡張）
+	_text_label = Label.new()
+	_text_label.name = 'TextLabel'
+	_text_label.add_theme_font_size_override('font_size', 17)
+	_text_label.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
+	_text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_text_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_text_label)
+
+	# 進むヒント（右寄せ）
+	_advance_hint = Label.new()
+	_advance_hint.name = 'AdvanceHint'
+	_advance_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_advance_hint.add_theme_font_size_override('font_size', 12)
+	_advance_hint.add_theme_color_override('font_color', Color(0.6, 0.75, 1.0, 0.75))
+	_advance_hint.text = '▼ クリック / Space / Z で進む'
+	vbox.add_child(_advance_hint)
+
+## 名前ラベルを半透明背景付きで生成するヘルパー
+func _make_name_label() -> Label:
+	var lbl = Label.new()
+	lbl.name = 'NameLabel'
+	lbl.anchor_left  = 0.0
+	lbl.anchor_right = 1.0
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override('font_size', 14)
+	lbl.add_theme_color_override('font_color', COLOR_TEXT_NAME)
+	return lbl
+
+## シネマティックを再生する
+func play(scene_id: String, substitutions: Dictionary = {}) -> void:
+	if not _scene_defs.has(scene_id):
+		cinematic_finished.emit(scene_id)
+		return
+
+	_current_scene_id  = scene_id
+	_substitutions     = substitutions
+	_current_lines     = _scene_defs[scene_id].get('lines', [])
+	_current_line_index = 0
+
+	# 背景画像設定
+	var bg_path = _scene_defs[scene_id].get('background', '')
+	if not bg_path.is_empty():
+		var tex = _load_texture(bg_path)
+		if tex:
+			_bg_image.texture = tex
+
+	visible = true
+	modulate.a = 0.0
+	var tween = create_tween()
+	tween.tween_property(self, 'modulate:a', 1.0, 0.45)
+	tween.tween_callback(func(): _show_line(_current_line_index))
+
+func _show_line(index: int) -> void:
+	if index >= _current_lines.size():
+		_finish()
+		return
+
+	var line    = _current_lines[index]
+	var speaker = line.get('speaker', 'left')
+
+	var left_info  = line.get('left',  null)
+	var right_info = line.get('right', null)
+
+	_setup_char_area(_left_area,  _left_sprite,  _left_name,  left_info,  speaker == 'left')
+	_setup_char_area(_right_area, _right_sprite, _right_name, right_info, speaker == 'right')
+
+	# 発言者名取得（置換あり）
+	var speaker_name = ''
+	if speaker == 'left'  and left_info  != null:
+		speaker_name = left_info.get('name', '')
+	elif speaker == 'right' and right_info != null:
+		speaker_name = right_info.get('name', '')
+
+	_speaker_label.text = _apply_subs(speaker_name)
+	_text_label.text    = _apply_subs(line.get('text', ''))
+
+func _setup_char_area(area: Control, sprite_rect: TextureRect, name_label: Label, info, is_speaker: bool) -> void:
+	if info == null:
+		area.modulate.a = 0.0
+		return
+
+	area.modulate.a = 1.0 if is_speaker else 0.45
+
+	# スプライトパスにも変数置換を適用
+	var sprite_path = _apply_subs(info.get('sprite', ''))
+	if not sprite_path.is_empty():
+		var tex = _load_texture(sprite_path)
+		sprite_rect.texture = tex if tex else null
+	else:
+		sprite_rect.texture = null
+
+	name_label.text = _apply_subs(info.get('name', ''))
+
+func _apply_subs(text: String) -> String:
+	var result = text
+	for key in _substitutions:
+		result = result.replace('{' + key + '}', _substitutions[key])
+	return result
+
+func _finish() -> void:
+	var tween = create_tween()
+	tween.tween_property(self, 'modulate:a', 0.0, 0.4)
+	tween.tween_callback(func():
+		visible = false
+		cinematic_finished.emit(_current_scene_id)
+	)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
+	var advance = false
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			advance = true
+	elif event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_Z]:
+			advance = true
+	if advance:
+		get_viewport().set_input_as_handled()
+		_current_line_index += 1
+		_show_line(_current_line_index)
+
+func _load_texture(res_path: String) -> Texture2D:
+	var abs_path = ProjectSettings.globalize_path(res_path)
+	var img = Image.new()
+	if img.load(abs_path) == OK:
+		return ImageTexture.create_from_image(img)
+	return null
+"
+
+[node name="CinematicPanel" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = SubResource("GDScript_cinematic")

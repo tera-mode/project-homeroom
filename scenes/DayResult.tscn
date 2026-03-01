@@ -1,0 +1,217 @@
+[gd_scene load_steps=2 format=3 uid="uid://day_result_scene"]
+
+[sub_resource type="GDScript" id="GDScript_dayresult"]
+script/source = "## DayResult.tscn のスクリプト
+## 放課後結果表示。日記形式で今日の出来事を見せる。
+extends Control
+
+const COLOR_TEXT_MAIN = Color(0.227, 0.165, 0.102)
+const COLOR_TEXT_SUB  = Color(0.478, 0.416, 0.353)
+const COLOR_PLUS      = Color(0.220, 0.580, 0.235)
+const COLOR_MINUS     = Color(0.820, 0.200, 0.200)
+
+var _day_result_defs: Array = []
+
+func _ready() -> void:
+	_apply_dark_theme()
+	GameManager.phase_changed.connect(_on_phase_changed)
+	_load_result_defs()
+	_build_ui()
+
+func _apply_dark_theme() -> void:
+	var theme = Theme.new()
+	theme.set_color('font_color', 'Label', COLOR_TEXT_MAIN)
+	theme.set_color('default_color', 'RichTextLabel', COLOR_TEXT_MAIN)
+	self.theme = theme
+
+func _load_result_defs() -> void:
+	var path = 'res://data/events.json'
+	if not FileAccess.file_exists(path):
+		return
+	var file = FileAccess.open(path, FileAccess.READ)
+	var json = JSON.new()
+	if json.parse(file.get_as_text()) == OK:
+		_day_result_defs = json.get_data().get('day_results', [])
+	file.close()
+
+func _build_ui() -> void:
+	var overlay = ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.45)
+	overlay.anchor_right = 1.0
+	overlay.anchor_bottom = 1.0
+	add_child(overlay)
+
+	# ノートカード
+	var card = Panel.new()
+	card.name = 'DiaryCard'
+	card.position = Vector2(200, 60)
+	card.size = Vector2(880, 560)
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.980, 0.984, 0.941)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.816, 0.847, 0.753)
+	style.corner_radius_top_left = 16
+	style.corner_radius_top_right = 16
+	style.corner_radius_bottom_left = 16
+	style.corner_radius_bottom_right = 16
+	style.shadow_color = Color(0, 0, 0, 0.25)
+	style.shadow_size = 8
+	card.add_theme_stylebox_override('panel', style)
+	add_child(card)
+
+	var vbox = VBoxContainer.new()
+	vbox.name = 'VBox'
+	vbox.position = Vector2(48, 40)
+	vbox.size = Vector2(784, 480)
+	vbox.add_theme_constant_override('separation', 16)
+	card.add_child(vbox)
+
+	# 日付（ノート見出し風）
+	var day_row = HBoxContainer.new()
+	vbox.add_child(day_row)
+
+	var notebook_icon = Label.new()
+	notebook_icon.text = '📓'
+	notebook_icon.add_theme_font_size_override('font_size', 18)
+	day_row.add_child(notebook_icon)
+
+	var day_label = Label.new()
+	day_label.name = 'DayLabel'
+	day_label.add_theme_font_size_override('font_size', 16)
+	day_label.add_theme_color_override('font_color', COLOR_TEXT_SUB)
+	day_row.add_child(day_label)
+
+	# タイトル
+	var title_label = Label.new()
+	title_label.name = 'TitleLabel'
+	title_label.add_theme_font_size_override('font_size', 28)
+	title_label.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title_label)
+
+	var sep = HSeparator.new()
+	vbox.add_child(sep)
+
+	# 本文
+	var text_label = RichTextLabel.new()
+	text_label.name = 'TextLabel'
+	text_label.add_theme_font_size_override('normal_font_size', 16)
+	text_label.add_theme_color_override('default_color', COLOR_TEXT_MAIN)
+	text_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	text_label.bbcode_enabled = true
+	text_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	vbox.add_child(text_label)
+
+	# パラメータ変動
+	var param_changes = HBoxContainer.new()
+	param_changes.name = 'ParamChanges'
+	param_changes.alignment = BoxContainer.ALIGNMENT_CENTER
+	param_changes.add_theme_constant_override('separation', 16)
+	vbox.add_child(param_changes)
+
+	# 次の日ボタン
+	var next_btn = Button.new()
+	next_btn.name = 'NextButton'
+	next_btn.text = '📖  次の日へ →'
+	next_btn.add_theme_font_size_override('font_size', 16)
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.290, 0.565, 0.851)
+	btn_style.corner_radius_top_left = 10
+	btn_style.corner_radius_top_right = 10
+	btn_style.corner_radius_bottom_left = 10
+	btn_style.corner_radius_bottom_right = 10
+	next_btn.add_theme_stylebox_override('normal', btn_style)
+	next_btn.add_theme_color_override('font_color', Color.WHITE)
+	next_btn.pressed.connect(_on_next_button_pressed)
+	vbox.add_child(next_btn)
+
+func _on_phase_changed(phase: GameManager.Phase) -> void:
+	if phase != GameManager.Phase.DAY_RESULT:
+		return
+	visible = true
+	_update_display()
+	_animate_in()
+
+func _update_display() -> void:
+	var card = get_node_or_null('DiaryCard')
+	if card == null:
+		return
+
+	var day_label = card.get_node_or_null('VBox/HBoxContainer/DayLabel')
+	if day_label:
+		day_label.text = '  %d日目の放課後' % GameManager.current_day
+
+	var result = _pick_result()
+
+	var title_label = card.get_node_or_null('VBox/TitleLabel')
+	if title_label:
+		title_label.text = result.get('title', '今日も一日が終わった')
+
+	var text_label = card.get_node_or_null('VBox/TextLabel')
+	if text_label:
+		text_label.text = result.get('text', 'あっという間に放課後になった。')
+
+	var bonus = result.get('param_bonus', {})
+	if not bonus.is_empty():
+		ParamStore.apply_deltas(bonus)
+		_show_param_changes(bonus)
+
+func _pick_result() -> Dictionary:
+	for result in _day_result_defs:
+		var cond = result.get('condition', {})
+		if cond.is_empty():
+			return result
+		var param = cond.get('param', '')
+		var op = cond.get('operator', '>=')
+		var val = cond.get('value', 0)
+		var current = ParamStore.get_param(param)
+		var matched = false
+		match op:
+			'>=': matched = current >= val
+			'<':  matched = current < val
+		if matched:
+			return result
+	return {'title': '今日も一日が終わった', 'text': 'あっという間に放課後になった。\nでも、なんか悪くない一日だったかも。', 'param_bonus': {}}
+
+func _show_param_changes(changes: Dictionary) -> void:
+	var param_changes = get_node_or_null('DiaryCard/VBox/ParamChanges')
+	if param_changes == null:
+		return
+	for child in param_changes.get_children():
+		child.queue_free()
+
+	var icons = {'study': '📚', 'romance': '💖', 'friendship': '🤝', 'popularity': '⭐', 'happening': '🌟'}
+	for param_id in changes:
+		var delta = changes[param_id]
+		if delta == 0:
+			continue
+		var lbl = Label.new()
+		var sign = '+' if delta > 0 else ''
+		lbl.text = '%s %s%d' % [icons.get(param_id, ''), sign, delta]
+		lbl.add_theme_font_size_override('font_size', 20)
+		lbl.add_theme_color_override('font_color', COLOR_PLUS if delta > 0 else COLOR_MINUS)
+		param_changes.add_child(lbl)
+
+		# ポップアニメ
+		var tween = lbl.create_tween()
+		tween.tween_property(lbl, 'scale', Vector2(1.3, 1.3), 0.15).set_ease(Tween.EASE_OUT)
+		tween.tween_property(lbl, 'scale', Vector2(1.0, 1.0), 0.15)
+
+func _animate_in() -> void:
+	modulate.a = 0.0
+	var card = get_node_or_null('DiaryCard')
+	if card:
+		card.position.y += 40
+		var tween = create_tween()
+		tween.tween_property(card, 'position:y', card.position.y - 40, 0.4).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tween.parallel().tween_property(self, 'modulate:a', 1.0, 0.3)
+
+func _on_next_button_pressed() -> void:
+	visible = false
+	GameManager.go_to_mission()
+"
+
+[node name="DayResult" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = SubResource("GDScript_dayresult")

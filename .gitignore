@@ -1,0 +1,16 @@
+# Godot キャッシュ・ビルド成果物
+.godot/
+
+# セーブデータ
+saves/
+
+# Claude Code ワークスペース（メモリは別リポジトリで管理）
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# エディタ
+*.swp
+*~

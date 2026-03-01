@@ -1,0 +1,362 @@
+{
+  "students": [
+    {
+      "id": "student_rina",
+      "name": "星宮リナ",
+      "category": "idol",
+      "rarity": 2,
+      "sprite": "student_rina_48x48.png",
+      "tags": [
+        "明るい",
+        "おしゃれ",
+        "アイドル"
+      ],
+      "hint_text": "前の学校でも注目されてたみたい。でも本当は…",
+      "unlock_cycle": 1,
+      "base_params": {
+        "study": -1,
+        "romance": 2,
+        "friendship": 0,
+        "popularity": 1,
+        "happening": 0
+      },
+      "effects": [
+        {
+          "effect_id": "rina_synergy_01",
+          "type": "adjacency",
+          "trigger": {
+            "scope": "orthogonal",
+            "condition": {
+              "has_tag": "明るい"
+            }
+          },
+          "apply": {
+            "target": "both",
+            "param_deltas": {
+              "popularity": 1
+            }
+          },
+          "flavor": "明るい子同士でキラキラオーラ発動！"
+        },
+        {
+          "effect_id": "rina_crash_01",
+          "type": "adjacency",
+          "trigger": {
+            "scope": "orthogonal",
+            "condition": {
+              "has_tag": "地味"
+            }
+          },
+          "apply": {
+            "target": "other",
+            "param_deltas": {
+              "friendship": -1
+            }
+          },
+          "flavor": "リナちゃんの隣はちょっと…きつい"
+        }
+      ],
+      "hidden_trait": {
+        "reveal_day": 3,
+        "description": "実は勉強が得意だった",
+        "effect_override": {
+          "base_params_delta": {
+            "study": 2
+          },
+          "add_effects": [],
+          "remove_effects": []
+        }
+      }
+    },
+    {
+      "id": "student_kenta",
+      "name": "大樹ケンタ",
+      "category": "honor",
+      "rarity": 1,
+      "sprite": "student_kenta_48x48.png",
+      "tags": [
+        "真面目",
+        "眼鏡",
+        "地味"
+      ],
+      "hint_text": "成績は学年トップらしいけど、なんか話しかけにくい…",
+      "unlock_cycle": 1,
+      "base_params": {
+        "study": 3,
+        "romance": -1,
+        "friendship": -1,
+        "popularity": -1,
+        "happening": 0
+      },
+      "effects": [
+        {
+          "effect_id": "kenta_window_bonus",
+          "type": "conditional",
+          "trigger": {
+            "scope": "self",
+            "condition": {
+              "seat_in": [
+                "window"
+              ]
+            }
+          },
+          "apply": {
+            "target": "self",
+            "param_deltas": {
+              "study": 1
+            }
+          },
+          "flavor": "窓際で集中力UP！外の景色が頭を冷やしてくれる"
+        },
+        {
+          "effect_id": "kenta_aura_study",
+          "type": "aura",
+          "trigger": {
+            "scope": "orthogonal",
+            "condition": {
+              "always": true
+            }
+          },
+          "apply": {
+            "target": "other",
+            "param_deltas": {
+              "study": 1
+            }
+          },
+          "flavor": "ケンタの勉強オーラが周りにも伝染"
+        }
+      ],
+      "hidden_trait": null
+    },
+    {
+      "id": "student_ren",
+      "name": "火坂レン",
+      "category": "yankee",
+      "rarity": 2,
+      "sprite": "student_ren_48x48.png",
+      "tags": [
+        "ヤンキー",
+        "熱血",
+        "義理人情"
+      ],
+      "hint_text": "怖そうだけど、なんか放っておけない雰囲気がある",
+      "unlock_cycle": 1,
+      "base_params": {
+        "study": -2,
+        "romance": 0,
+        "friendship": 2,
+        "popularity": 1,
+        "happening": 0
+      },
+      "effects": [
+        {
+          "effect_id": "ren_synergy_yankee",
+          "type": "adjacency",
+          "trigger": {
+            "scope": "orthogonal",
+            "condition": {
+              "has_tag": "ヤンキー"
+            }
+          },
+          "apply": {
+            "target": "both",
+            "param_deltas": {
+              "friendship": 2
+            }
+          },
+          "flavor": "義理の絆！ヤンキー同士の固い友情"
+        },
+        {
+          "effect_id": "ren_crash_honor",
+          "type": "adjacency",
+          "trigger": {
+            "scope": "orthogonal",
+            "condition": {
+              "has_tag": "真面目"
+            }
+          },
+          "apply": {
+            "target": "both",
+            "param_deltas": {
+              "friendship": -1,
+              "study": -1
+            }
+          },
+          "flavor": "真面目とヤンキーは水と油…"
+        }
+      ],
+      "hidden_trait": {
+        "reveal_day": 3,
+        "description": "実は寂しがり屋だった",
+        "effect_override": {
+          "base_params_delta": {
+            "friendship": 1
+          },
+          "add_effects": [
+            {
+              "effect_id": "ren_lonely_reveal",
+              "type": "adjacency",
+              "trigger": {
+                "scope": "orthogonal",
+                "condition": {
+                  "always": true
+                }
+              },
+              "apply": {
+                "target": "self",
+                "param_deltas": {
+                  "friendship": 1
+                }
+              },
+              "flavor": "孤独は嫌だ…そう気づいたレンは変わった"
+            }
+          ],
+          "remove_effects": [
+            "ren_crash_honor"
+          ]
+        }
+      }
+    },
+    {
+      "id": "student_haru",
+      "name": "七瀬ハル",
+      "category": "entertainer",
+      "rarity": 2,
+      "sprite": "student_haru_48x48.png",
+      "tags": [
+        "明るい",
+        "お笑い",
+        "エンタメ",
+        "予測不能"
+      ],
+      "hint_text": "いつも笑わせてくれるけど、なんか計算してそうな目をしてる",
+      "unlock_cycle": 1,
+      "base_params": {
+        "study": -1,
+        "romance": 0,
+        "friendship": 1,
+        "popularity": 2,
+        "happening": 2
+      },
+      "effects": [
+        {
+          "effect_id": "haru_laugh_trigger",
+          "type": "trigger",
+          "trigger": {
+            "scope": "same_row",
+            "condition": {
+              "always": true
+            }
+          },
+          "apply": {
+            "target": "other",
+            "param_deltas": {
+              "friendship": 1
+            }
+          },
+          "flavor": "ハルのギャグで同じ列が爆笑！"
+        },
+        {
+          "effect_id": "haru_chaos",
+          "type": "aura",
+          "trigger": {
+            "scope": "surrounding",
+            "condition": {
+              "always": true
+            }
+          },
+          "apply": {
+            "target": "other",
+            "param_deltas": {
+              "happening": 1
+            }
+          },
+          "flavor": "ハプニングメーカー。近くにいると何かが起きる"
+        }
+      ],
+      "hidden_trait": null
+    },
+    {
+      "id": "student_zero",
+      "name": "謎の転校生ゼロ",
+      "category": "wildcard",
+      "rarity": 3,
+      "sprite": "student_zero_48x48.png",
+      "tags": [
+        "謎",
+        "無口",
+        "ワイルドカード"
+      ],
+      "hint_text": "名前も素性も不明。でもなぜかクラスが落ち着く気がする…",
+      "unlock_cycle": 2,
+      "base_params": {
+        "study": 1,
+        "romance": 1,
+        "friendship": 1,
+        "popularity": 1,
+        "happening": 1
+      },
+      "effects": [
+        {
+          "effect_id": "zero_random_daily",
+          "type": "trigger",
+          "trigger": {
+            "scope": "board_wide",
+            "condition": {
+              "always": true
+            }
+          },
+          "apply": {
+            "target": "other",
+            "param_deltas": {
+              "happening": 0
+            },
+            "random_daily": {
+              "param": "happening",
+              "range": [
+                -2,
+                2
+              ]
+            }
+          },
+          "flavor": "ゼロがいると毎日何かが起きる"
+        }
+      ],
+      "hidden_trait": {
+        "reveal_day": 3,
+        "description": "本当の姿が明らかに…",
+        "effect_override": {
+          "base_params_delta": {
+            "study": 1,
+            "romance": 1,
+            "friendship": 1,
+            "popularity": 1,
+            "happening": 2
+          },
+          "add_effects": [
+            {
+              "effect_id": "zero_true_aura",
+              "type": "aura",
+              "trigger": {
+                "scope": "board_wide",
+                "condition": {
+                  "always": true
+                }
+              },
+              "apply": {
+                "target": "other",
+                "param_deltas": {
+                  "happening": 1
+                }
+              },
+              "flavor": "ゼロの正体が明かされ、クラス全体が揺れる！"
+            }
+          ],
+          "remove_effects": [
+            "zero_random_daily"
+          ]
+        }
+      }
+    }
+  ]
+}

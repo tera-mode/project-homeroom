@@ -1,0 +1,64 @@
+{
+  "scenes": [
+    {
+      "id": "opening",
+      "background": "res://assets/backgrounds/classroom_bg.png",
+      "lines": [
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": null,
+          "speaker": "left",
+          "text": "やあやあ、{player_name}{player_suffix}！ちょうどよかった、呼ぼうとしとったんじゃ！"
+        },
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": null,
+          "speaker": "left",
+          "text": "本日より、本校・私立夕凪学園の名物制度を君に担当してもらうことになったぞ！"
+        },
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": null,
+          "speaker": "left",
+          "text": "その名も…『転校生ガチャ制度』！毎朝一人、全国から転校生がやってくる不思議な制度じゃ！"
+        },
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": null,
+          "speaker": "left",
+          "text": "そして転校生の席を決めるのが——今学期から、君の仕事じゃ！"
+        },
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
+          "speaker": "right",
+          "text": "え…わたしが？なんで！？"
+        },
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
+          "speaker": "left",
+          "text": "ははは！なんでって…えーと…まあ細かいことはいいんじゃ！校長の直感じゃ！"
+        },
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
+          "speaker": "left",
+          "text": "4×4、たった16席の教室に、誰をどこに座らせるかでクラスの雰囲気がガラリと変わる！席の配置は奥深いぞ！"
+        },
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
+          "speaker": "left",
+          "text": "30日後の学園祭までに、最高のクラスを作り上げてみせろ！校長は…期待しておるぞ！たぶん！"
+        },
+        {
+          "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
+          "speaker": "right",
+          "text": "（たぶん、って言った…）"
+        }
+      ]
+    }
+  ]
+}

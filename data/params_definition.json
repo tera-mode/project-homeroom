@@ -1,0 +1,57 @@
+{
+  "params": [
+    {
+      "id": "study",
+      "display_name": "勉強",
+      "icon": "📚",
+      "color": "#4A90D9",
+      "min": 0,
+      "max": 100,
+      "initial": 10
+    },
+    {
+      "id": "romance",
+      "display_name": "恋愛",
+      "icon": "💖",
+      "color": "#E85B8A",
+      "min": 0,
+      "max": 100,
+      "initial": 5
+    },
+    {
+      "id": "friendship",
+      "display_name": "友情",
+      "icon": "🤝",
+      "color": "#5BAE5F",
+      "min": 0,
+      "max": 100,
+      "initial": 10
+    },
+    {
+      "id": "popularity",
+      "display_name": "人気",
+      "icon": "⭐",
+      "color": "#F5A623",
+      "min": 0,
+      "max": 100,
+      "initial": 5
+    },
+    {
+      "id": "happening",
+      "display_name": "ハプニング",
+      "icon": "🌟",
+      "color": "#9B59B6",
+      "min": 0,
+      "max": 100,
+      "initial": 10,
+      "derived": true,
+      "formula": "weighted_average",
+      "weights": {
+        "study": 0.25,
+        "romance": 0.25,
+        "friendship": 0.25,
+        "popularity": 0.25
+      }
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+[gd_scene load_steps=2 format=3 uid="uid://main_scene"]
+
+[sub_resource type="GDScript" id="GDScript_main"]
+script/source = "extends Control
+
+var _title: Control = null
+var _player_setup: Control = null
+var _cinematic_panel: Control = null
+var _classroom: Control = null
+var _student_card: Control = null
+var _day_result: Control = null
+var _mission_panel: Control = null
+var _ending_screen: Control = null
+
+func _ready() -> void:
+	_load_scenes()
+	GameManager.phase_changed.connect(_on_phase_changed)
+	GameManager.ending_reached.connect(_on_ending_reached)
+
+	# セーブデータがあればロードしてからタイトルへ
+	if SaveManager.has_save():
+		var board = _get_board()
+		if board:
+			SaveManager.load_game(board)
+
+	# 常にタイトルからスタート
+	_show_phase(GameManager.Phase.TITLE)
+
+func _load_scenes() -> void:
+	_title = load('res://scenes/TitleScreen.tscn').instantiate()
+	add_child(_title)
+
+	_player_setup = load('res://scenes/PlayerSetup.tscn').instantiate()
+	add_child(_player_setup)
+
+	_cinematic_panel = load('res://scenes/CinematicPanel.tscn').instantiate()
+	add_child(_cinematic_panel)
+
+	_classroom = load('res://scenes/Classroom.tscn').instantiate()
+	add_child(_classroom)
+
+	_student_card = load('res://scenes/StudentCard.tscn').instantiate()
+	add_child(_student_card)
+
+	_day_result = load('res://scenes/DayResult.tscn').instantiate()
+	add_child(_day_result)
+
+	_mission_panel = load('res://scenes/MissionPanel.tscn').instantiate()
+	add_child(_mission_panel)
+
+	_ending_screen = load('res://scenes/EndingScreen.tscn').instantiate()
+	add_child(_ending_screen)
+
+	# シグナル接続
+	_player_setup.setup_complete.connect(_on_player_setup_complete)
+	_cinematic_panel.cinematic_finished.connect(_on_cinematic_finished)
+	GameManager.cinematic_requested.connect(_on_cinematic_requested)
+
+	# 初期表示状態
+	_classroom.visible     = false
+	_student_card.visible  = false
+	_day_result.visible    = false
+	_mission_panel.visible = false
+	_ending_screen.visible = false
+
+	_build_debug_button()
+
+func _build_debug_button() -> void:
+	var btn = Button.new()
+	btn.text = '🔄 DEBUG: リセット'
+	btn.add_theme_font_size_override('font_size', 11)
+
+	# 半透明の赤スタイル
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.7, 0.1, 0.1, 0.75)
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_left = 6
+	style.corner_radius_bottom_right = 6
+	btn.add_theme_stylebox_override('normal', style)
+	var hover_style = style.duplicate()
+	hover_style.bg_color = Color(0.9, 0.2, 0.2, 0.9)
+	btn.add_theme_stylebox_override('hover', hover_style)
+	btn.add_theme_color_override('font_color', Color.WHITE)
+
+	# 右下に固定
+	btn.anchor_left   = 1.0
+	btn.anchor_top    = 1.0
+	btn.anchor_right  = 1.0
+	btn.anchor_bottom = 1.0
+	btn.offset_left   = -160
+	btn.offset_top    = -38
+	btn.offset_right  = -8
+	btn.offset_bottom = -8
+
+	# 全シーンより手前に表示
+	btn.z_index = 100
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	btn.pressed.connect(_on_debug_reset_pressed)
+	add_child(btn)
+
+func _on_phase_changed(new_phase: GameManager.Phase) -> void:
+	_show_phase(new_phase)
+
+func _on_ending_reached(_ending_id: String) -> void:
+	_show_phase(GameManager.Phase.ENDING)
+
+func _show_phase(phase: GameManager.Phase) -> void:
+	if _title:         _title.visible         = (phase == GameManager.Phase.TITLE)
+	if _player_setup:  _player_setup.visible  = (phase == GameManager.Phase.PLAYER_SETUP)
+	# CinematicPanel は自前で visible を管理するため _show_phase では触らない
+	if _classroom:     _classroom.visible     = (phase == GameManager.Phase.HOMEROOM or phase == GameManager.Phase.PLACEMENT)
+	if _student_card:  _student_card.visible  = (phase == GameManager.Phase.HOMEROOM)
+	if _day_result:    _day_result.visible    = (phase == GameManager.Phase.DAY_RESULT)
+	if _mission_panel: _mission_panel.visible = (phase == GameManager.Phase.MISSION)
+	if _ending_screen: _ending_screen.visible = (phase == GameManager.Phase.ENDING)
+
+func _on_player_setup_complete(name: String, gender: String, seat: int) -> void:
+	GameManager.complete_player_setup(name, gender, seat)
+	# complete_player_setup 内で cinematic_requested が emit される
+
+func _on_cinematic_requested(scene_id: String) -> void:
+	var is_male = GameManager.player_gender == 'male'
+	var subs = {
+		'player_name':   GameManager.player_name,
+		'player_suffix': 'くん' if is_male else 'ちゃん',
+		'player_sprite': 'player_male_48x48.png' if is_male else 'player_female_48x48.png'
+	}
+	_cinematic_panel.play(scene_id, subs)
+
+func _on_cinematic_finished(scene_id: String) -> void:
+	if scene_id == 'opening':
+		var board = _get_board()
+		if board:
+			board.player_seat = GameManager.player_seat
+			# board_changed を emit してグリッド表示を即座に更新
+			# （start_new_game → HOMEROOM フェーズ移行後は自動更新が走らないため）
+			board.board_changed.emit()
+		GameManager.start_new_game()
+
+func _get_board() -> Node:
+	if _classroom == null:
+		return null
+	return _classroom.get_node_or_null('Board')
+
+func _on_debug_reset_pressed() -> void:
+	# Board もリセットしてからGameManagerに委譲
+	var board = _get_board()
+	if board:
+		board.reset()
+	GameManager.reset_to_title()
+"
+
+[node name="Main" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = SubResource("GDScript_main")
