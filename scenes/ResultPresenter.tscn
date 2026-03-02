@@ -1,97 +1,132 @@
 [gd_scene load_steps=2 format=3 uid="uid://result_presenter_scene"]
 
 [sub_resource type="GDScript" id="GDScript_result"]
-script/source = "## ResultPresenter.tscn のスクリプト
+script/source = "## ResultPresenter.tscn のスクリプト（v3.0）
 ## 帰宅フェーズ: 日次処理結果をステップバイステップで表示する
 extends Control
 
-const COLOR_TEXT_MAIN = Color(0.227, 0.165, 0.102)
-const COLOR_TEXT_SUB  = Color(0.478, 0.416, 0.353)
-const COLOR_PLUS      = Color(0.220, 0.580, 0.235)
-const COLOR_MINUS     = Color(0.820, 0.200, 0.200)
+const COLOR_TEXT  = Color(0.227, 0.165, 0.102)
+const COLOR_SUB   = Color(0.478, 0.416, 0.353)
+const COLOR_BG    = Color(0.980, 0.984, 0.941)
+const COLOR_CARD  = Color(0.998, 0.998, 0.975)
+const COLOR_PLUS  = Color(0.200, 0.650, 0.300)
+const COLOR_MINUS = Color(0.820, 0.200, 0.200)
+const COLOR_ALERT = Color(0.900, 0.450, 0.100)
+const COLOR_BORDER = Color(0.816, 0.847, 0.753)
+const COLOR_ACCENT = Color(0.290, 0.565, 0.851)
 
-const SUBJECT_ICONS = { 'study': '📚 勉強', 'sports': '⚽ 運動', 'art': '🎨 芸術' }
+const SUBJECT_LABELS = { 'study': '📚 勉強', 'sports': '⚽ 運動', 'art': '🎨 芸術' }
 
 var _step: int = 0
 var _steps: Array = []
 
 func _ready() -> void:
-	_apply_dark_theme()
 	GameManager.phase_changed.connect(_on_phase_changed)
 	_build_ui()
 
-func _apply_dark_theme() -> void:
-	var theme = Theme.new()
-	theme.set_color('font_color', 'Label', COLOR_TEXT_MAIN)
-	theme.set_color('default_color', 'RichTextLabel', COLOR_TEXT_MAIN)
-	self.theme = theme
-
 func _build_ui() -> void:
-	var overlay = ColorRect.new()
-	overlay.color = Color(0, 0, 0, 0.5)
-	overlay.anchor_right = 1.0
-	overlay.anchor_bottom = 1.0
-	add_child(overlay)
+	# 背景
+	var bg = ColorRect.new()
+	bg.color = COLOR_BG
+	bg.anchor_right = 1.0
+	bg.anchor_bottom = 1.0
+	add_child(bg)
 
+	var nb_path = 'res://assets/backgrounds/notebook_texture.png'
+	var nb_abs = ProjectSettings.globalize_path(nb_path)
+	var nb_img = Image.new()
+	if nb_img.load(nb_abs) == OK:
+		var nb_tex = TextureRect.new()
+		nb_tex.texture = ImageTexture.create_from_image(nb_img)
+		nb_tex.anchor_right = 1.0
+		nb_tex.anchor_bottom = 1.0
+		nb_tex.stretch_mode = TextureRect.STRETCH_TILE
+		nb_tex.modulate.a = 0.3
+		add_child(nb_tex)
+
+	# カード
 	var card = Panel.new()
 	card.name = 'DiaryCard'
-	card.position = Vector2(180, 50)
-	card.size = Vector2(920, 580)
+	card.anchor_left   = 0.5
+	card.anchor_right  = 0.5
+	card.anchor_top    = 0.5
+	card.anchor_bottom = 0.5
+	card.offset_left   = -480
+	card.offset_right  = 480
+	card.offset_top    = -310
+	card.offset_bottom = 310
 	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.980, 0.984, 0.941)
+	style.bg_color = COLOR_CARD
+	style.border_color = COLOR_BORDER
 	style.set_border_width_all(2)
-	style.border_color = Color(0.816, 0.847, 0.753)
-	style.corner_radius_top_left = 16
-	style.corner_radius_top_right = 16
-	style.corner_radius_bottom_left = 16
-	style.corner_radius_bottom_right = 16
-	style.shadow_color = Color(0, 0, 0, 0.25)
-	style.shadow_size = 8
+	style.corner_radius_top_left = 18
+	style.corner_radius_top_right = 18
+	style.corner_radius_bottom_left = 18
+	style.corner_radius_bottom_right = 18
+	style.shadow_color = Color(0, 0, 0, 0.18)
+	style.shadow_size = 10
 	card.add_theme_stylebox_override('panel', style)
 	add_child(card)
 
 	var vbox = VBoxContainer.new()
 	vbox.name = 'VBox'
-	vbox.position = Vector2(48, 36)
-	vbox.size = Vector2(824, 508)
-	vbox.add_theme_constant_override('separation', 12)
+	vbox.anchor_right = 1.0
+	vbox.anchor_bottom = 1.0
+	vbox.offset_left = 48
+	vbox.offset_right = -48
+	vbox.offset_top = 32
+	vbox.offset_bottom = -32
+	vbox.add_theme_constant_override('separation', 14)
 	card.add_child(vbox)
 
-	# 日付
+	# 日付行
 	var day_row = HBoxContainer.new()
 	vbox.add_child(day_row)
 	var icon_lbl = Label.new()
 	icon_lbl.text = '📓'
-	icon_lbl.add_theme_font_size_override('font_size', 18)
+	icon_lbl.add_theme_font_size_override('font_size', 22)
 	day_row.add_child(icon_lbl)
 	var day_lbl = Label.new()
 	day_lbl.name = 'DayLabel'
-	day_lbl.add_theme_font_size_override('font_size', 16)
-	day_lbl.add_theme_color_override('font_color', COLOR_TEXT_SUB)
+	day_lbl.add_theme_font_size_override('font_size', 20)
+	day_lbl.add_theme_color_override('font_color', COLOR_SUB)
 	day_row.add_child(day_lbl)
 
 	# ステップ見出し
 	var step_lbl = Label.new()
 	step_lbl.name = 'StepLabel'
-	step_lbl.add_theme_font_size_override('font_size', 22)
-	step_lbl.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
+	step_lbl.add_theme_font_size_override('font_size', 28)
+	step_lbl.add_theme_color_override('font_color', COLOR_TEXT)
 	step_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(step_lbl)
 
 	var sep = HSeparator.new()
+	var sep_style = StyleBoxFlat.new()
+	sep_style.bg_color = COLOR_BORDER
+	sep.add_theme_stylebox_override('separator', sep_style)
 	vbox.add_child(sep)
 
-	# ステップ本文
+	# 本文
 	var content_lbl = RichTextLabel.new()
 	content_lbl.name = 'ContentLabel'
-	content_lbl.add_theme_font_size_override('normal_font_size', 15)
-	content_lbl.add_theme_color_override('default_color', COLOR_TEXT_MAIN)
+	content_lbl.add_theme_font_size_override('normal_font_size', 20)
+	content_lbl.add_theme_color_override('default_color', COLOR_TEXT)
 	content_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_lbl.bbcode_enabled = true
 	content_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 	vbox.add_child(content_lbl)
 
-	# ステップ表示（ドット）
+	# アラートラベル
+	var alert_lbl = Label.new()
+	alert_lbl.name = 'AlertLabel'
+	alert_lbl.add_theme_font_size_override('font_size', 20)
+	alert_lbl.add_theme_color_override('font_color', COLOR_ALERT)
+	alert_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	alert_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	alert_lbl.visible = false
+	vbox.add_child(alert_lbl)
+
+	# ドット
 	var dot_row = HBoxContainer.new()
 	dot_row.name = 'DotRow'
 	dot_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -101,14 +136,19 @@ func _build_ui() -> void:
 	var next_btn = Button.new()
 	next_btn.name = 'NextButton'
 	next_btn.text = '次へ →'
-	next_btn.add_theme_font_size_override('font_size', 16)
+	next_btn.add_theme_font_size_override('font_size', 22)
+	next_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	next_btn.custom_minimum_size = Vector2(220, 52)
 	var btn_style = StyleBoxFlat.new()
-	btn_style.bg_color = Color(0.290, 0.565, 0.851)
-	btn_style.corner_radius_top_left = 10
-	btn_style.corner_radius_top_right = 10
-	btn_style.corner_radius_bottom_left = 10
-	btn_style.corner_radius_bottom_right = 10
+	btn_style.bg_color = COLOR_ACCENT
+	btn_style.corner_radius_top_left = 12
+	btn_style.corner_radius_top_right = 12
+	btn_style.corner_radius_bottom_left = 12
+	btn_style.corner_radius_bottom_right = 12
 	next_btn.add_theme_stylebox_override('normal', btn_style)
+	var btn_hover = btn_style.duplicate()
+	btn_hover.bg_color = COLOR_ACCENT.lightened(0.15)
+	next_btn.add_theme_stylebox_override('hover', btn_hover)
 	next_btn.add_theme_color_override('font_color', Color.WHITE)
 	next_btn.pressed.connect(_on_next_pressed)
 	vbox.add_child(next_btn)
@@ -128,60 +168,121 @@ func _build_steps() -> void:
 
 	# Step 1: 授業
 	var subject = r.get('subject', 'study')
-	var is_test  = r.get('is_test', false)
-	_steps.append({
-		'title': '📚 今日の授業',
-		'body': SUBJECT_ICONS.get(subject, subject) + ' の授業が行われた。' +
-			('\\n\\n[color=#e8c840]📝 今日はテスト日！[/color]' if is_test else '')
-	})
+	var is_test = r.get('is_test', false)
+	var subject_label = SUBJECT_LABELS.get(subject, subject)
+	var body = '[b]' + subject_label + '[/b] の授業が行われた。\n'
+	body += '\n[color=#7a6a5a]授業の効果: その科目のパラメータが1上昇（充実度+10以上なら2倍）[/color]'
+	if is_test:
+		body += '\n\n[color=#e8a820]📝 今日はテスト日！[/color]'
+	_steps.append({ 'title': '📚 今日の授業', 'body': body })
 
 	# Step 2: テスト結果（テスト日のみ）
 	if is_test:
 		var test_results = r.get('test_results', {})
+		var test_scores  = r.get('test_scores',  {})
 		var lines = []
+		var passing_score = 0
+		for sc in test_scores.values():
+			passing_score = sc.get('passing', 0)
+			break
+		lines.append('[color=#7a6a5a]合格ライン: %d点以上[/color]' % passing_score)
+		lines.append('')
 		for char_id in test_results:
-			var state = CharacterState.get_state(char_id)
-			var name_str = StudentDB.get_student_by_id(char_id).get('name', char_id)
-			var passed = test_results[char_id]
+			var sc_data = test_scores.get(char_id, {})
+			var score   = sc_data.get('score', 0)
+			var passing = sc_data.get('passing', 0)
+			var passed  = test_results[char_id]
+			var name_str: String
+			if char_id == 'player':
+				name_str = 'あなた'
+			else:
+				name_str = StudentDB.get_student_by_id(char_id).get('name', char_id)
+			var subject_stat = SUBJECT_LABELS.get(subject, subject)
 			var color = '#3ab03e' if passed else '#cc3333'
-			lines.append('[color=%s]%s: %s[/color]' % [color, name_str, 'クリア ✓' if passed else '赤点 ✗'])
+			var result_str = 'クリア ✓' if passed else '赤点 ✗'
+			lines.append('[color=%s]%s: %s %d点 → %s  (充実度%s)[/color]' % [
+				color, name_str, subject_stat, score, result_str,
+				'+5' if passed else '-5'
+			])
 		_steps.append({
 			'title': '📝 テスト結果',
-			'body': '\\n'.join(lines) if lines else 'テスト対象者なし'
+			'body': '\n'.join(lines) if lines else 'テスト対象者なし'
 		})
 
-	# Step 3: 特殊能力ログ
+	# Step 3: 特殊能力ログ（詳細）
 	var ability_log = r.get('ability_log', [])
 	if not ability_log.is_empty():
 		var lines = []
 		for entry in ability_log:
-			var actor = StudentDB.get_student_by_id(entry.get('actor', '')).get('name', entry.get('actor', ''))
-			lines.append('[b]%s[/b] の [color=#7a4aab]%s[/color]: %s' % [actor, entry.get('ability_name', ''), entry.get('effect_desc', '')])
-		_steps.append({
-			'title': '✨ 特殊能力の効果',
-			'body': '\\n'.join(lines)
-		})
+			var actor_id = entry.get('actor', '')
+			var actor_name: String
+			if actor_id == 'player':
+				actor_name = 'あなた'
+			else:
+				actor_name = StudentDB.get_student_by_id(actor_id).get('name', actor_id)
+			lines.append('[b]%s[/b] の [color=#7a4aab]%s[/color]' % [actor_name, entry.get('ability_name', '')])
+			var details: Array = entry.get('details', [])
+			if not details.is_empty():
+				for d in details:
+					lines.append('  → ' + d)
+			else:
+				lines.append('  → ' + entry.get('effect_desc', ''))
+			lines.append('')
+		_steps.append({ 'title': '✨ 特殊能力の効果', 'body': '\n'.join(lines).strip_edges() })
 
-	# Step 4: 充実度変動
+	# Step 4: 充実度変動（常に表示）
 	var f_deltas = r.get('fulfillment_deltas', {})
-	if not f_deltas.is_empty():
-		var lines = []
-		for char_id in f_deltas:
-			var delta = f_deltas[char_id]
-			if delta == 0:
-				continue
-			var name_str = ('あなた' if char_id == 'player'
-				else StudentDB.get_student_by_id(char_id).get('name', char_id))
-			var sign  = '+' if delta > 0 else ''
-			var color = '#3ab03e' if delta > 0 else '#cc3333'
-			var cur_f = CharacterState.get_state(char_id).get('fulfillment', 0)
-			lines.append('[color=%s]%s: %s%d (現在 %d)[/color]' % [color, name_str, sign, delta, cur_f])
-		_steps.append({
-			'title': '💫 充実度の変化',
-			'body': '\\n'.join(lines) if lines else '大きな変化はなかった'
-		})
+	var f_lines = []
+	f_lines.append('[color=#7a6a5a]※ 充実度+10以上→授業効果2倍 / -10以下→転校（退場）[/color]')
+	f_lines.append('')
+	var has_f_change = false
+	for char_id in f_deltas:
+		var delta = f_deltas[char_id]
+		if delta == 0:
+			continue
+		has_f_change = true
+		var name_str: String
+		if char_id == 'player':
+			name_str = 'あなた'
+		else:
+			name_str = StudentDB.get_student_by_id(char_id).get('name', char_id)
+		var sign  = '+' if delta > 0 else ''
+		var color = '#3ab03e' if delta > 0 else '#cc3333'
+		var cur_f = CharacterState.get_state(char_id).get('fulfillment', 0)
+		f_lines.append('[color=%s]%s: %s%d  （現在 %d）[/color]' % [color, name_str, sign, delta, cur_f])
+	if not has_f_change:
+		f_lines.append('[color=#7a6a5a]今日は充実度の変化はなかった[/color]')
+	_steps.append({ 'title': '💫 充実度の変化', 'body': '\n'.join(f_lines) })
 
-	# Step 5: 転校
+	# Step 5: 仲良し度の状況
+	var label_icons  = { 'koibito': '💕', 'shinyu': '👫', 'tomodachi': '😊', 'bimyo': '😬', 'zekko': '💢', '': '・' }
+	var label_names  = { 'koibito': '恋人', 'shinyu': '親友', 'tomodachi': '友達', 'bimyo': '微妙', 'zekko': '絶交', '': '普通' }
+	var active_ids = CharacterState.get_all_active_ids()
+	var f_lines2 = []
+	var p_gender = CharacterState.get_state('player').get('gender', 'female')
+	for other_id in active_ids:
+		if other_id == 'player':
+			continue
+		var other_name = StudentDB.get_student_by_id(other_id).get('name', other_id)
+		var p_to_other = FriendshipManager.get_friendship('player', other_id)
+		var other_to_p = FriendshipManager.get_friendship(other_id, 'player')
+		var o_gender = CharacterState.get_state(other_id).get('gender', 'male')
+		var lbl = FriendshipManager.get_relationship_label('player', other_id, p_gender, o_gender)
+		var icon = label_icons.get(lbl, '・')
+		var lbl_name = label_names.get(lbl, '普通')
+		var color = '#cc3333' if lbl == 'zekko' else ('#e8a820' if lbl == 'bimyo' else ('#3ab03e' if lbl in ['tomodachi','shinyu','koibito'] else '#7a6a5a'))
+		f_lines2.append('%s [b]%s[/b]  あなた→%s%d / 相手→%s%d  [color=%s][%s][/color]' % [
+			icon, other_name,
+			'+' if p_to_other >= 0 else '', p_to_other,
+			'+' if other_to_p >= 0 else '', other_to_p,
+			color, lbl_name
+		])
+	_steps.append({
+		'title': '💞 仲良し度の状況',
+		'body': '\n'.join(f_lines2) if not f_lines2.is_empty() else 'まだクラスメイトがいない'
+	})
+
+	# Step 6: 転校
 	var transfers = r.get('transfers', [])
 	if not transfers.is_empty():
 		var names = []
@@ -189,13 +290,13 @@ func _build_steps() -> void:
 			names.append(StudentDB.get_student_by_id(char_id).get('name', char_id))
 		_steps.append({
 			'title': '😢 転校',
-			'body': '、'.join(names) + ' が転校していった…'
+			'body': '、'.join(names) + ' が転校していった…\n\n[color=#cc3333]充実度が-10以下になったため退場[/color]'
 		})
 
 	# 最後: 翌日へ
 	_steps.append({
 		'title': '🌙 今日もお疲れ様',
-		'body': '%d日目が終わった。\\n明日も頑張ろう。' % r.get('day', GameManager.current_day)
+		'body': '%d日目が終わった。\n明日も頑張ろう。' % r.get('day', GameManager.current_day)
 	})
 
 func _show_current_step() -> void:
@@ -220,8 +321,17 @@ func _show_current_step() -> void:
 
 	var next_btn = card.get_node_or_null('VBox/NextButton')
 	if next_btn:
-		var is_last = (_step == _steps.size() - 1)
-		next_btn.text = '📖 次の日へ →' if is_last else '次へ →'
+		next_btn.text = '📖 次の日へ →' if _step == _steps.size() - 1 else '次へ →'
+
+	# 充実度アラートチェック（充実度変化ページのみ）
+	var alert_lbl = card.get_node_or_null('VBox/AlertLabel')
+	if alert_lbl:
+		alert_lbl.visible = false
+		if step_data.get('title', '').begins_with('💫'):
+			var alerts = _build_fulfillment_alerts()
+			if not alerts.is_empty():
+				alert_lbl.text = alerts
+				alert_lbl.visible = true
 
 	# ドット更新
 	var dot_row = card.get_node_or_null('VBox/DotRow')
@@ -231,9 +341,26 @@ func _show_current_step() -> void:
 		for i in range(_steps.size()):
 			var dot = Label.new()
 			dot.text = '●' if i == _step else '○'
-			dot.add_theme_font_size_override('font_size', 10)
-			dot.add_theme_color_override('font_color', Color(0.290, 0.565, 0.851) if i == _step else COLOR_TEXT_SUB)
+			dot.add_theme_font_size_override('font_size', 12)
+			dot.add_theme_color_override('font_color', COLOR_ACCENT if i == _step else COLOR_SUB)
 			dot_row.add_child(dot)
+
+func _build_fulfillment_alerts() -> String:
+	var alerts = []
+	for char_id in CharacterState.get_all_active_ids():
+		var state = CharacterState.get_state(char_id)
+		var f = state.get('fulfillment', 0)
+		var name_str: String
+		if char_id == 'player':
+			name_str = 'あなた'
+		else:
+			var sd = StudentDB.get_student_by_id(char_id)
+			name_str = sd.get('name', char_id)
+		if f >= 8 and f < 10:
+			alerts.append('⚡ %s の充実度が%dに！もうすぐ授業効果2倍！' % [name_str, f])
+		elif f <= -8 and f > -10:
+			alerts.append('⚠️ %s の充実度が%dに！転校の危機！' % [name_str, f])
+	return '\n'.join(alerts)
 
 func _on_next_pressed() -> void:
 	_step += 1
@@ -247,9 +374,9 @@ func _animate_in() -> void:
 	modulate.a = 0.0
 	var card = get_node_or_null('DiaryCard')
 	if card:
-		card.position.y += 40
+		card.position.y += 30
 		var tween = create_tween()
-		tween.tween_property(card, 'position:y', card.position.y - 40, 0.4).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tween.tween_property(card, 'position:y', card.position.y - 30, 0.4).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 		tween.parallel().tween_property(self, 'modulate:a', 1.0, 0.3)
 "
 

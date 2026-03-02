@@ -40,6 +40,8 @@ func apply_all_abilities(board: Node) -> Array:
 			if ab.is_empty():
 				continue
 
+			var effect_details = []
+
 			for effect in ab.get("effects", []):
 				var scope       = effect.get("scope", "self")
 				var effect_type = effect.get("effect_type", "param")
@@ -62,10 +64,39 @@ func apply_all_abilities(board: Node) -> Array:
 						"fulfillment":
 							CharacterState.apply_fulfillment_delta(target_id, delta)
 
+					# 詳細ログに追記
+					var target_name: String
+					if target_id == "player":
+						target_name = "あなた"
+					else:
+						var td = StudentDB.get_student_by_id(target_id)
+						target_name = td.get("name", target_id)
+
+					var actor_name: String
+					if char_id == "player":
+						actor_name = "あなた"
+					else:
+						var ad = StudentDB.get_student_by_id(char_id)
+						actor_name = ad.get("name", char_id)
+
+					var effect_str = ""
+					var sign = "+" if delta >= 0 else ""
+					match effect_type:
+						"param":
+							var param_names = {"study": "勉強", "sports": "運動", "art": "芸術"}
+							effect_str = target_name + " の" + param_names.get(effect.get("target_param","study"), "?") + " " + sign + str(delta)
+						"friendship":
+							# apply_friendship_delta(target_id, char_id, delta) = target の char への仲良し度
+							effect_str = target_name + " の " + actor_name + " への仲良し度 " + sign + str(delta)
+						"fulfillment":
+							effect_str = target_name + " の充実度 " + sign + str(delta)
+					effect_details.append(effect_str)
+
 			log_entries.append({
-				"actor":       char_id,
+				"actor":        char_id,
 				"ability_name": ab.get("name", ability_id),
-				"effect_desc": ab.get("description", "")
+				"effect_desc":  ab.get("description", ""),
+				"details":      effect_details
 			})
 
 	return log_entries

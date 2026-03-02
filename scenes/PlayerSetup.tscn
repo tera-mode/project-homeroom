@@ -1,16 +1,13 @@
 [gd_scene load_steps=2 format=3 uid="uid://player_setup_scene"]
 
 [sub_resource type="GDScript" id="GDScript_player_setup"]
-script/source = "## PlayerSetup.tscn のスクリプト（v2.0）
-## 主人公の名前・性別・タイプ・好きなタイプ・嫌いなタイプ・席を設定する
+script/source = "## PlayerSetup.tscn のスクリプト（v3.0）
+## 主人公の名前・性別・タイプ・好きなタイプ・嫌いなタイプ・得意能力を設定する
+## 席は常に6番（seat_index=5）固定
 extends Control
 
 signal setup_complete(player_name: String, player_gender: String,
-	player_type: String, like_type: String, dislike_type: String, player_seat: int)
-
-const GRID_ROWS = 4
-const GRID_COLS = 4
-const SEAT_BTN_SIZE = 52
+	player_type: String, like_type: String, dislike_type: String, player_skill: String)
 
 const TYPES = [
 	{ 'id': 'yancha',    'name': 'ヤンチャ',     'icon': '🔥' },
@@ -19,31 +16,42 @@ const TYPES = [
 	{ 'id': 'futsu',     'name': 'ふつう',       'icon': '😊' }
 ]
 
-const COLOR_BG         = Color(0.10, 0.12, 0.18)
-const COLOR_CARD       = Color(0.15, 0.17, 0.25, 0.97)
-const COLOR_TEXT_MAIN  = Color(0.95, 0.93, 0.88)
-const COLOR_TEXT_SUB   = Color(0.65, 0.70, 0.80)
-const COLOR_ACCENT     = Color(0.290, 0.565, 0.851)
-const COLOR_GIRL       = Color(0.910, 0.357, 0.541)
-const COLOR_BOY        = Color(0.290, 0.565, 0.851)
-const COLOR_SEAT_EMPTY    = Color(0.22, 0.25, 0.35)
-const COLOR_SEAT_SELECTED = Color(0.290, 0.565, 0.851)
-const COLOR_TYPE_SEL   = Color(0.35, 0.55, 0.85)
+const SKILLS = [
+	{ 'id': 'study',  'name': '勉強', 'icon': '📚' },
+	{ 'id': 'sports', 'name': '運動', 'icon': '⚽' },
+	{ 'id': 'art',    'name': '芸術', 'icon': '🎨' }
+]
+
+# ノートスタイル カラーパレット
+const COLOR_BG       = Color(0.980, 0.984, 0.941)
+const COLOR_CARD     = Color(1.0, 1.0, 0.99, 0.98)
+const COLOR_TEXT     = Color(0.227, 0.165, 0.102)
+const COLOR_SUB      = Color(0.478, 0.416, 0.353)
+const COLOR_ACCENT   = Color(0.290, 0.565, 0.851)
+const COLOR_GIRL     = Color(0.910, 0.357, 0.541)
+const COLOR_BOY      = Color(0.290, 0.565, 0.851)
+const COLOR_LIKE     = Color(0.200, 0.650, 0.300)
+const COLOR_DISLIKE  = Color(0.820, 0.200, 0.200)
+const COLOR_SKILL    = Color(0.557, 0.271, 0.678)
+const COLOR_INACTIVE = Color(0.820, 0.820, 0.820)
+const COLOR_BORDER   = Color(0.816, 0.847, 0.753)
 
 var _gender: String = 'female'
-var _selected_seat: int = -1
 var _player_type: String = ''
 var _like_type: String   = ''
 var _dislike_type: String = ''
+var _player_skill: String = ''
 
 var _name_input: LineEdit = null
 var _girl_btn: Button = null
 var _boy_btn: Button  = null
+var _girl_sprite: TextureRect = null
+var _boy_sprite: TextureRect  = null
 var _confirm_btn: Button = null
-var _seat_buttons: Array = []
-var _type_buttons: Dictionary   = {}
-var _like_buttons: Dictionary   = {}
+var _type_buttons: Dictionary    = {}
+var _like_buttons: Dictionary    = {}
 var _dislike_buttons: Dictionary = {}
+var _skill_buttons: Dictionary   = {}
 
 func _ready() -> void:
 	visible = false
@@ -54,29 +62,42 @@ func _on_phase_changed(phase: GameManager.Phase) -> void:
 	visible = (phase == GameManager.Phase.PLAYER_SETUP)
 	if visible:
 		_reset_state()
+		modulate.a = 0.0
+		var tw = create_tween()
+		tw.tween_property(self, 'modulate:a', 1.0, 0.4)
 
 func _reset_state() -> void:
 	_gender = 'female'
-	_selected_seat = -1
 	_player_type = ''
 	_like_type = ''
 	_dislike_type = ''
+	_player_skill = ''
 	if _name_input:
 		_name_input.text = ''
-	_update_gender_buttons()
-	_update_seat_buttons()
-	_update_type_buttons()
-	_update_like_buttons()
-	_update_dislike_buttons()
-	_update_confirm_btn()
+	_update_all()
 
 func _build_ui() -> void:
+	# 背景（ノート柄）
 	var bg = ColorRect.new()
 	bg.color = COLOR_BG
 	bg.anchor_right = 1.0
 	bg.anchor_bottom = 1.0
 	add_child(bg)
 
+	# 罫線テクスチャ
+	var bg_path = 'res://assets/backgrounds/notebook_texture.png'
+	var abs_path = ProjectSettings.globalize_path(bg_path)
+	var img = Image.new()
+	if img.load(abs_path) == OK:
+		var bg_tex = TextureRect.new()
+		bg_tex.texture = ImageTexture.create_from_image(img)
+		bg_tex.anchor_right = 1.0
+		bg_tex.anchor_bottom = 1.0
+		bg_tex.stretch_mode = TextureRect.STRETCH_TILE
+		bg_tex.modulate.a = 0.5
+		add_child(bg_tex)
+
+	# メインカード
 	var card = Panel.new()
 	card.name = 'Card'
 	var card_style = StyleBoxFlat.new()
@@ -85,318 +106,306 @@ func _build_ui() -> void:
 	card_style.corner_radius_top_right = 16
 	card_style.corner_radius_bottom_left = 16
 	card_style.corner_radius_bottom_right = 16
-	card_style.border_color = Color(0.4, 0.5, 0.8, 0.5)
+	card_style.border_color = COLOR_BORDER
 	card_style.set_border_width_all(2)
+	card_style.shadow_color = Color(0, 0, 0, 0.12)
+	card_style.shadow_size = 8
 	card.add_theme_stylebox_override('panel', card_style)
 	card.anchor_left = 0.5
 	card.anchor_right = 0.5
 	card.anchor_top = 0.5
 	card.anchor_bottom = 0.5
-	card.offset_left   = -310
-	card.offset_right  = 310
-	card.offset_top    = -350
-	card.offset_bottom = 350
+	card.offset_left   = -320
+	card.offset_right  = 320
+	card.offset_top    = -340
+	card.offset_bottom = 340
 	add_child(card)
 
 	var scroll = ScrollContainer.new()
 	scroll.anchor_right = 1.0
 	scroll.anchor_bottom = 1.0
-	scroll.offset_left = 16
-	scroll.offset_right = -16
-	scroll.offset_top = 16
-	scroll.offset_bottom = -16
+	scroll.offset_left = 20
+	scroll.offset_right = -20
+	scroll.offset_top = 20
+	scroll.offset_bottom = -20
 	card.add_child(scroll)
 
 	var vbox = VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override('separation', 12)
+	vbox.add_theme_constant_override('separation', 16)
 	scroll.add_child(vbox)
 
 	# タイトル
 	var title_lbl = Label.new()
 	title_lbl.text = 'あなたのことを教えてください'
 	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_lbl.add_theme_font_size_override('font_size', 20)
-	title_lbl.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
+	title_lbl.add_theme_font_size_override('font_size', 22)
+	title_lbl.add_theme_color_override('font_color', COLOR_TEXT)
 	vbox.add_child(title_lbl)
-	vbox.add_child(_make_separator())
+	vbox.add_child(_make_sep())
 
-	# 性別
+	# ─── 性別 ───
+	vbox.add_child(_make_section_label('性別'))
 	var gender_row = HBoxContainer.new()
-	gender_row.add_theme_constant_override('separation', 12)
+	gender_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	gender_row.add_theme_constant_override('separation', 20)
 	vbox.add_child(gender_row)
-	var g_lbl = _make_sub_label('性別：')
-	gender_row.add_child(g_lbl)
-	_girl_btn = _make_toggle_button('女の子', COLOR_GIRL)
-	_girl_btn.pressed.connect(func(): _gender = 'female'; _update_gender_buttons())
-	gender_row.add_child(_girl_btn)
-	_boy_btn = _make_toggle_button('男の子', COLOR_BOY)
-	_boy_btn.pressed.connect(func(): _gender = 'male'; _update_gender_buttons())
-	gender_row.add_child(_boy_btn)
 
-	# 名前
-	var name_row = HBoxContainer.new()
-	name_row.add_theme_constant_override('separation', 12)
-	vbox.add_child(name_row)
-	name_row.add_child(_make_sub_label('名前：'))
+	# 女の子ボタン（スプライト付き）
+	var girl_vbox = VBoxContainer.new()
+	girl_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	gender_row.add_child(girl_vbox)
+	_girl_sprite = _make_sprite_rect('res://assets/sprites/player_female_48x48.png', 80)
+	girl_vbox.add_child(_girl_sprite)
+	_girl_btn = _make_toggle_button('女の子', COLOR_GIRL, 100, 36)
+	_girl_btn.pressed.connect(func(): _gender = 'female'; _update_all())
+	girl_vbox.add_child(_girl_btn)
+
+	# 男の子ボタン（スプライト付き）
+	var boy_vbox = VBoxContainer.new()
+	boy_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	gender_row.add_child(boy_vbox)
+	_boy_sprite = _make_sprite_rect('res://assets/sprites/player_male_48x48.png', 80)
+	boy_vbox.add_child(_boy_sprite)
+	_boy_btn = _make_toggle_button('男の子', COLOR_BOY, 100, 36)
+	_boy_btn.pressed.connect(func(): _gender = 'male'; _update_all())
+	boy_vbox.add_child(_boy_btn)
+
+	# ─── 名前 ───
+	vbox.add_child(_make_sep())
+	vbox.add_child(_make_section_label('名前'))
 	_name_input = LineEdit.new()
 	_name_input.placeholder_text = '名前を入力してください'
-	_name_input.add_theme_font_size_override('font_size', 15)
-	_name_input.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
-	_name_input.custom_minimum_size = Vector2(220, 36)
-	_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_name_input.text_changed.connect(func(_t): _update_confirm_btn())
+	_name_input.add_theme_font_size_override('font_size', 18)
+	_name_input.add_theme_color_override('font_color', COLOR_TEXT)
+	_name_input.custom_minimum_size = Vector2(240, 42)
+	_name_input.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_name_input.text_changed.connect(func(_t): _update_confirm())
 	var inp_style = StyleBoxFlat.new()
-	inp_style.bg_color = Color(0.08, 0.10, 0.18)
-	inp_style.border_color = Color(0.4, 0.5, 0.8, 0.6)
+	inp_style.bg_color = Color(0.96, 0.97, 0.92)
+	inp_style.border_color = COLOR_BORDER
 	inp_style.set_border_width_all(2)
-	inp_style.corner_radius_top_left = 6
-	inp_style.corner_radius_top_right = 6
-	inp_style.corner_radius_bottom_left = 6
-	inp_style.corner_radius_bottom_right = 6
-	inp_style.content_margin_left = 8
-	inp_style.content_margin_right = 8
-	inp_style.content_margin_top = 6
-	inp_style.content_margin_bottom = 6
+	inp_style.corner_radius_top_left = 8
+	inp_style.corner_radius_top_right = 8
+	inp_style.corner_radius_bottom_left = 8
+	inp_style.corner_radius_bottom_right = 8
+	inp_style.content_margin_left = 10
+	inp_style.content_margin_right = 10
+	inp_style.content_margin_top = 8
+	inp_style.content_margin_bottom = 8
 	_name_input.add_theme_stylebox_override('normal', inp_style)
 	_name_input.add_theme_stylebox_override('focus', inp_style)
-	name_row.add_child(_name_input)
+	vbox.add_child(_name_input)
 
-	# タイプ選択
-	vbox.add_child(_make_sub_label('あなたのタイプ：'))
+	# ─── あなたのタイプ ───
+	vbox.add_child(_make_sep())
+	vbox.add_child(_make_section_label('あなたのタイプ'))
 	var type_row = HBoxContainer.new()
+	type_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	type_row.add_theme_constant_override('separation', 8)
-	type_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(type_row)
 	_type_buttons = {}
 	for t in TYPES:
-		var btn = _make_toggle_button(t['icon'] + t['name'], COLOR_TYPE_SEL)
-		btn.custom_minimum_size = Vector2(0, 34)
-		btn.pressed.connect(_on_type_selected.bind(t['id']))
+		var btn = _make_toggle_button(t['icon'] + ' ' + t['name'], COLOR_ACCENT, 110, 40)
+		btn.pressed.connect(_on_type_sel.bind(t['id']))
 		type_row.add_child(btn)
 		_type_buttons[t['id']] = btn
 
-	# 好きなタイプ
-	vbox.add_child(_make_sub_label('好きなタイプ（💚 毎日+1）：'))
-	var like_row2 = HBoxContainer.new()
-	like_row2.name = 'LikeRow'
-	like_row2.add_theme_constant_override('separation', 8)
-	like_row2.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vbox.add_child(like_row2)
+	# ─── 好きなタイプ ───
+	vbox.add_child(_make_section_label('好きなタイプ  💚 毎日+1'))
+	var like_row = HBoxContainer.new()
+	like_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	like_row.add_theme_constant_override('separation', 8)
+	vbox.add_child(like_row)
 	_like_buttons = {}
 	for t in TYPES:
-		var btn = _make_toggle_button(t['icon'] + t['name'], Color(0.2, 0.65, 0.3))
-		btn.custom_minimum_size = Vector2(0, 34)
-		btn.pressed.connect(_on_like_selected.bind(t['id']))
-		btn.visible = false
-		like_row2.add_child(btn)
+		var btn = _make_toggle_button(t['icon'] + ' ' + t['name'], COLOR_LIKE, 110, 40)
+		btn.pressed.connect(_on_like_sel.bind(t['id']))
+		like_row.add_child(btn)
 		_like_buttons[t['id']] = btn
 
-	# 嫌いなタイプ
-	vbox.add_child(_make_sub_label('苦手なタイプ（❌ 毎日-1）：'))
-	var dislike_row = HBoxContainer.new()
-	dislike_row.name = 'DislikeRow'
-	dislike_row.add_theme_constant_override('separation', 8)
-	dislike_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vbox.add_child(dislike_row)
+	# ─── 苦手なタイプ ───
+	vbox.add_child(_make_section_label('苦手なタイプ  ❌ 毎日-1'))
+	var dis_row = HBoxContainer.new()
+	dis_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	dis_row.add_theme_constant_override('separation', 8)
+	vbox.add_child(dis_row)
 	_dislike_buttons = {}
 	for t in TYPES:
-		var btn = _make_toggle_button(t['icon'] + t['name'], Color(0.75, 0.25, 0.25))
-		btn.custom_minimum_size = Vector2(0, 34)
-		btn.pressed.connect(_on_dislike_selected.bind(t['id']))
-		btn.visible = false
-		dislike_row.add_child(btn)
+		var btn = _make_toggle_button(t['icon'] + ' ' + t['name'], COLOR_DISLIKE, 110, 40)
+		btn.pressed.connect(_on_dislike_sel.bind(t['id']))
+		dis_row.add_child(btn)
 		_dislike_buttons[t['id']] = btn
 
-	vbox.add_child(_make_separator())
+	# ─── 得意能力 ───
+	vbox.add_child(_make_sep())
+	var skill_title = Label.new()
+	skill_title.text = '得意なこと  ★ +3でスタート'
+	skill_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	skill_title.add_theme_font_size_override('font_size', 15)
+	skill_title.add_theme_color_override('font_color', COLOR_SKILL)
+	vbox.add_child(skill_title)
+	var skill_row = HBoxContainer.new()
+	skill_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	skill_row.add_theme_constant_override('separation', 16)
+	vbox.add_child(skill_row)
+	_skill_buttons = {}
+	for sk in SKILLS:
+		var btn = _make_toggle_button(sk['icon'] + ' ' + sk['name'], COLOR_SKILL, 120, 46)
+		btn.add_theme_font_size_override('font_size', 17)
+		btn.pressed.connect(_on_skill_sel.bind(sk['id']))
+		skill_row.add_child(btn)
+		_skill_buttons[sk['id']] = btn
 
-	# 席選択
-	var seat_lbl = Label.new()
-	seat_lbl.text = 'あなたの席を選んでください'
-	seat_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	seat_lbl.add_theme_font_size_override('font_size', 14)
-	seat_lbl.add_theme_color_override('font_color', COLOR_TEXT_SUB)
-	vbox.add_child(seat_lbl)
-
-	var grid_container = GridContainer.new()
-	grid_container.columns = GRID_COLS
-	grid_container.add_theme_constant_override('h_separation', 6)
-	grid_container.add_theme_constant_override('v_separation', 6)
-	grid_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vbox.add_child(grid_container)
-
-	_seat_buttons = []
-	for i in range(GRID_ROWS * GRID_COLS):
-		var seat_btn = Button.new()
-		seat_btn.custom_minimum_size = Vector2(SEAT_BTN_SIZE, SEAT_BTN_SIZE)
-		seat_btn.text = str(i + 1)
-		seat_btn.add_theme_font_size_override('font_size', 11)
-		_apply_seat_style(seat_btn, false)
-		seat_btn.pressed.connect(_on_seat_pressed.bind(i))
-		grid_container.add_child(seat_btn)
-		_seat_buttons.append(seat_btn)
-
-	vbox.add_child(_make_separator())
-
-	# はじめるボタン
+	# ─── スタートボタン ───
+	vbox.add_child(_make_sep())
 	_confirm_btn = Button.new()
 	_confirm_btn.text = 'はじめる！'
-	_confirm_btn.add_theme_font_size_override('font_size', 20)
+	_confirm_btn.add_theme_font_size_override('font_size', 22)
 	_confirm_btn.disabled = true
-	var confirm_style = StyleBoxFlat.new()
-	confirm_style.bg_color = COLOR_ACCENT
-	confirm_style.corner_radius_top_left = 12
-	confirm_style.corner_radius_top_right = 12
-	confirm_style.corner_radius_bottom_left = 12
-	confirm_style.corner_radius_bottom_right = 12
-	_confirm_btn.add_theme_stylebox_override('normal', confirm_style)
-	var confirm_hover = confirm_style.duplicate()
-	confirm_hover.bg_color = COLOR_ACCENT.lightened(0.15)
-	_confirm_btn.add_theme_stylebox_override('hover', confirm_hover)
-	var confirm_dis = confirm_style.duplicate()
-	confirm_dis.bg_color = Color(0.3, 0.3, 0.4, 0.5)
-	_confirm_btn.add_theme_stylebox_override('disabled', confirm_dis)
-	_confirm_btn.add_theme_color_override('font_color', Color.WHITE)
-	_confirm_btn.add_theme_color_override('font_disabled_color', Color(0.5, 0.5, 0.6))
+	_confirm_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_confirm_btn.custom_minimum_size = Vector2(220, 52)
+	_style_confirm_btn()
 	_confirm_btn.pressed.connect(_on_confirm_pressed)
 	vbox.add_child(_confirm_btn)
 
-	_update_gender_buttons()
+	_update_all()
 
 # --- イベントハンドラ ---
 
-func _on_type_selected(type_id: String) -> void:
+func _on_type_sel(type_id: String) -> void:
 	_player_type = type_id
-	# like/dislike が同じタイプなら解除
-	if _like_type == type_id:
-		_like_type = ''
-	if _dislike_type == type_id:
-		_dislike_type = ''
-	_update_type_buttons()
-	_update_like_buttons()
-	_update_dislike_buttons()
-	_update_confirm_btn()
+	_update_all()
 
-func _on_like_selected(type_id: String) -> void:
+func _on_like_sel(type_id: String) -> void:
 	_like_type = type_id
-	if _dislike_type == type_id:
-		_dislike_type = ''
-	_update_like_buttons()
-	_update_dislike_buttons()
-	_update_confirm_btn()
+	_update_all()
 
-func _on_dislike_selected(type_id: String) -> void:
+func _on_dislike_sel(type_id: String) -> void:
 	_dislike_type = type_id
-	_update_dislike_buttons()
-	_update_confirm_btn()
+	_update_all()
 
-func _on_seat_pressed(index: int) -> void:
-	_selected_seat = index
-	_update_seat_buttons()
-	_update_confirm_btn()
+func _on_skill_sel(skill_id: String) -> void:
+	_player_skill = skill_id
+	_update_all()
 
 func _on_confirm_pressed() -> void:
 	var name_val = _name_input.text.strip_edges()
-	if name_val.is_empty() or _selected_seat < 0 or _player_type == '' or _like_type == '' or _dislike_type == '':
+	if name_val.is_empty() or _player_type == '' or _like_type == '' or _dislike_type == '' or _player_skill == '':
 		return
 	var tween = create_tween()
 	tween.tween_property(self, 'modulate:a', 0.0, 0.3)
 	tween.tween_callback(func():
 		visible = false
-		setup_complete.emit(name_val, _gender, _player_type, _like_type, _dislike_type, _selected_seat)
+		setup_complete.emit(name_val, _gender, _player_type, _like_type, _dislike_type, _player_skill)
 	)
 
 # --- UI更新 ---
 
-func _update_type_buttons() -> void:
+func _update_all() -> void:
+	_update_gender_display()
 	for t_id in _type_buttons:
-		_set_toggle_active(_type_buttons[t_id], t_id == _player_type, COLOR_TYPE_SEL)
-
-func _update_like_buttons() -> void:
+		_set_active(_type_buttons[t_id], t_id == _player_type, COLOR_ACCENT)
 	for t_id in _like_buttons:
-		var btn = _like_buttons[t_id]
-		btn.visible = (t_id != _player_type)
-		_set_toggle_active(btn, t_id == _like_type, Color(0.2, 0.65, 0.3))
-
-func _update_dislike_buttons() -> void:
+		_set_active(_like_buttons[t_id], t_id == _like_type, COLOR_LIKE)
 	for t_id in _dislike_buttons:
-		var btn = _dislike_buttons[t_id]
-		btn.visible = (t_id != _player_type and t_id != _like_type)
-		_set_toggle_active(btn, t_id == _dislike_type, Color(0.75, 0.25, 0.25))
+		_set_active(_dislike_buttons[t_id], t_id == _dislike_type, COLOR_DISLIKE)
+	for sk_id in _skill_buttons:
+		_set_active(_skill_buttons[sk_id], sk_id == _player_skill, COLOR_SKILL)
+	_update_confirm()
 
-func _update_gender_buttons() -> void:
+func _update_gender_display() -> void:
 	if _girl_btn == null or _boy_btn == null:
 		return
-	_set_toggle_active(_girl_btn, _gender == 'female', COLOR_GIRL)
-	_set_toggle_active(_boy_btn,  _gender == 'male',   COLOR_BOY)
+	var is_girl = (_gender == 'female')
+	_set_active(_girl_btn, is_girl, COLOR_GIRL)
+	_set_active(_boy_btn, not is_girl, COLOR_BOY)
+	if _girl_sprite:
+		_girl_sprite.modulate.a = 1.0 if is_girl else 0.4
+	if _boy_sprite:
+		_boy_sprite.modulate.a = 1.0 if not is_girl else 0.4
 
-func _set_toggle_active(btn: Button, active: bool, color: Color) -> void:
-	var s = StyleBoxFlat.new()
-	s.bg_color = color if active else Color(0.2, 0.22, 0.32)
-	s.border_color = color.lightened(0.2) if active else color.darkened(0.3)
-	s.set_border_width_all(2)
-	s.corner_radius_top_left = 8
-	s.corner_radius_top_right = 8
-	s.corner_radius_bottom_left = 8
-	s.corner_radius_bottom_right = 8
-	btn.add_theme_stylebox_override('normal', s)
-	btn.add_theme_stylebox_override('hover', s)
-	btn.add_theme_color_override('font_color', Color.WHITE if active else Color(0.7, 0.75, 0.85))
-
-func _update_seat_buttons() -> void:
-	for i in range(_seat_buttons.size()):
-		_apply_seat_style(_seat_buttons[i], i == _selected_seat)
-
-func _apply_seat_style(btn: Button, selected: bool) -> void:
-	var style = StyleBoxFlat.new()
-	style.bg_color = COLOR_SEAT_SELECTED if selected else COLOR_SEAT_EMPTY
-	style.border_color = COLOR_SEAT_SELECTED.lightened(0.2) if selected else Color(0.35, 0.40, 0.55)
-	style.set_border_width_all(2)
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_left = 6
-	style.corner_radius_bottom_right = 6
-	btn.add_theme_stylebox_override('normal', style)
-	btn.add_theme_stylebox_override('hover', style)
-	btn.add_theme_color_override('font_color', Color.WHITE if selected else COLOR_TEXT_SUB)
-
-func _update_confirm_btn() -> void:
+func _update_confirm() -> void:
 	if _confirm_btn == null or _name_input == null:
 		return
-	_confirm_btn.disabled = (
-		_name_input.text.strip_edges().is_empty() or
-		_selected_seat < 0 or
-		_player_type == '' or
-		_like_type == '' or
-		_dislike_type == ''
+	var ok = (
+		not _name_input.text.strip_edges().is_empty() and
+		_player_type != '' and
+		_like_type != '' and
+		_dislike_type != '' and
+		_player_skill != ''
 	)
+	_confirm_btn.disabled = not ok
+
+func _set_active(btn: Button, active: bool, color: Color) -> void:
+	var s = StyleBoxFlat.new()
+	s.bg_color = color if active else Color(0.90, 0.91, 0.88)
+	s.border_color = color if active else COLOR_BORDER
+	s.set_border_width_all(2)
+	s.corner_radius_top_left = 10
+	s.corner_radius_top_right = 10
+	s.corner_radius_bottom_left = 10
+	s.corner_radius_bottom_right = 10
+	btn.add_theme_stylebox_override('normal', s)
+	var hover = s.duplicate()
+	hover.bg_color = color.lightened(0.1) if active else COLOR_INACTIVE
+	btn.add_theme_stylebox_override('hover', hover)
+	btn.add_theme_color_override('font_color', Color.WHITE if active else COLOR_SUB)
 
 # --- ヘルパー ---
 
-func _make_sub_label(text: String) -> Label:
+func _make_section_label(text: String) -> Label:
 	var lbl = Label.new()
 	lbl.text = text
-	lbl.add_theme_font_size_override('font_size', 14)
-	lbl.add_theme_color_override('font_color', COLOR_TEXT_SUB)
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override('font_size', 15)
+	lbl.add_theme_color_override('font_color', COLOR_SUB)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	return lbl
 
-func _make_toggle_button(label: String, color: Color) -> Button:
+func _make_toggle_button(label: String, color: Color, min_w: int = 90, min_h: int = 36) -> Button:
 	var btn = Button.new()
 	btn.text = label
-	btn.add_theme_font_size_override('font_size', 13)
-	btn.custom_minimum_size = Vector2(80, 36)
-	_set_toggle_active(btn, false, color)
+	btn.add_theme_font_size_override('font_size', 14)
+	btn.custom_minimum_size = Vector2(min_w, min_h)
+	_set_active(btn, false, color)
 	return btn
 
-func _make_separator() -> HSeparator:
+func _make_sep() -> HSeparator:
 	var sep = HSeparator.new()
-	var sep_style = StyleBoxFlat.new()
-	sep_style.bg_color = Color(0.4, 0.5, 0.8, 0.3)
-	sep_style.content_margin_top = 1
-	sep_style.content_margin_bottom = 1
-	sep.add_theme_stylebox_override('separator', sep_style)
+	var style = StyleBoxFlat.new()
+	style.bg_color = COLOR_BORDER
+	style.content_margin_top = 1
+	style.content_margin_bottom = 1
+	sep.add_theme_stylebox_override('separator', style)
 	return sep
+
+func _make_sprite_rect(res_path: String, size: int) -> TextureRect:
+	var rect = TextureRect.new()
+	rect.custom_minimum_size = Vector2(size, size)
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	var abs_path = ProjectSettings.globalize_path(res_path)
+	var img = Image.new()
+	if img.load(abs_path) == OK:
+		rect.texture = ImageTexture.create_from_image(img)
+	return rect
+
+func _style_confirm_btn() -> void:
+	var s = StyleBoxFlat.new()
+	s.bg_color = COLOR_ACCENT
+	s.corner_radius_top_left = 14
+	s.corner_radius_top_right = 14
+	s.corner_radius_bottom_left = 14
+	s.corner_radius_bottom_right = 14
+	_confirm_btn.add_theme_stylebox_override('normal', s)
+	var hover = s.duplicate()
+	hover.bg_color = COLOR_ACCENT.lightened(0.15)
+	_confirm_btn.add_theme_stylebox_override('hover', hover)
+	var dis = s.duplicate()
+	dis.bg_color = COLOR_INACTIVE
+	_confirm_btn.add_theme_stylebox_override('disabled', dis)
+	_confirm_btn.add_theme_color_override('font_color', Color.WHITE)
+	_confirm_btn.add_theme_color_override('font_disabled_color', Color(0.6, 0.6, 0.6))
 "
 
 [node name="PlayerSetup" type="Control"]

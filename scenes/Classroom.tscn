@@ -1,98 +1,388 @@
 [gd_scene load_steps=2 format=3 uid="uid://classroom_scene"]
 
 [sub_resource type="GDScript" id="GDScript_classroom"]
-script/source = "## Classroom.tscn のスクリプト
-## 4×4グリッドの表示・配置・授業フェーズUIを管理する
+script/source = "## Classroom.tscn のスクリプト（v3.0）
+## 左半分: 転校生情報パネル（席選択中も常時表示）
+## 右半分: 4×4グリッド
 extends Control
 
 const GRID_ROWS = 4
 const GRID_COLS = 4
-const CELL_SIZE = 76
+const CELL_SIZE = 138
 
-const GRID_OFFSET_X = 60
-const GRID_OFFSET_Y = 60
-
-const COLOR_TEXT_MAIN    = Color(0.227, 0.165, 0.102)
-const COLOR_TEXT_SUB     = Color(0.478, 0.416, 0.353)
-const COLOR_EMPTY_BG     = Color(0.980, 0.984, 0.941)
-const COLOR_EMPTY_BORDER = Color(0.816, 0.847, 0.753)
-const COLOR_PREVIEW_HL   = Color(0.357, 0.667, 0.863)
-const COLOR_OCCUPIED_BG  = Color(0.941, 0.961, 0.902)
+# カラーパレット（ノートスタイル）
+const COLOR_BG         = Color(0.980, 0.984, 0.941)
+const COLOR_TEXT       = Color(0.227, 0.165, 0.102)
+const COLOR_SUB        = Color(0.478, 0.416, 0.353)
+const COLOR_EMPTY_BG   = Color(0.96, 0.97, 0.93)
+const COLOR_EMPTY_BDR  = Color(0.816, 0.847, 0.753)
+const COLOR_OCCUPIED   = Color(0.916, 0.945, 0.875)
+const COLOR_OCCUPIED_BDR = Color(0.357, 0.682, 0.369, 0.7)
+const COLOR_PLAYER_BDR = Color(0.290, 0.565, 0.851, 0.9)
+const COLOR_PREVIEW_HL = Color(0.357, 0.667, 0.863)
+const COLOR_ACCENT     = Color(0.290, 0.565, 0.851)
+const COLOR_PLUS       = Color(0.200, 0.650, 0.300)
+const COLOR_MINUS      = Color(0.820, 0.200, 0.200)
 
 const TYPE_ICONS = { \"yancha\": \"🔥\", \"yuutousei\": \"📖\", \"otaku\": \"🎮\", \"futsu\": \"😊\" }
+const TYPE_NAMES = { \"yancha\": \"ヤンチャ\", \"yuutousei\": \"ゆうとうせい\", \"otaku\": \"オタク\", \"futsu\": \"ふつう\" }
 
 var board: Node
 var _cells: Array = []
 var _drag_student: Dictionary = {}
 var _class_overlay: Control = null
 
+# 転校生情報パネル
+var _info_left: Control = null
+var _student_portrait: TextureRect = null
+var _student_name_lbl: Label = null
+var _student_type_lbl: Label = null
+var _student_rarity_lbl: Label = null
+var _student_params_lbl: Label = null
+var _student_ability_lbl: Label = null
+var _student_hint_lbl: Label = null
+var _placement_hint_lbl: Label = null
+
+# ホバーツールチップ
+var _tooltip: Control = null
+
 signal placement_confirmed(seat_index: int, student_data: Dictionary)
 
 func _ready() -> void:
-	_apply_dark_theme()
 	board = load('res://scripts/Board.gd').new()
 	board.name = 'Board'
 	add_child(board)
 	board.add_to_group('board')
 	add_to_group('classroom')
-	_build_background()
-	_build_grid()
-	_build_info_panel()
-	_build_class_overlay()
+
+	_build_ui()
+
 	board.board_changed.connect(_on_board_changed)
 	GameManager.student_drawn.connect(_on_student_drawn)
 	GameManager.phase_changed.connect(_on_phase_changed)
 
-func _apply_dark_theme() -> void:
-	var theme = Theme.new()
-	theme.set_color('font_color', 'Label', COLOR_TEXT_MAIN)
-	self.theme = theme
-
-func _build_background() -> void:
+func _build_ui() -> void:
+	# 背景
 	var bg = ColorRect.new()
-	bg.color = Color(0.980, 0.984, 0.941)
+	bg.color = COLOR_BG
 	bg.anchor_right = 1.0
 	bg.anchor_bottom = 1.0
 	bg.z_index = -1
 	add_child(bg)
-	var bg_path = 'res://assets/backgrounds/classroom_bg.png'
-	var bg_tex_data = _load_texture(bg_path)
-	if bg_tex_data:
-		var bg_tex = TextureRect.new()
-		bg_tex.texture = bg_tex_data
-		bg_tex.anchor_right = 1.0
-		bg_tex.anchor_bottom = 1.0
-		bg_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		bg_tex.modulate.a = 0.15
-		bg_tex.z_index = -1
-		add_child(bg_tex)
 
-func _build_grid() -> void:
-	var title = Label.new()
-	title.text = '教室（4×4席）'
-	title.position = Vector2(GRID_OFFSET_X, GRID_OFFSET_Y - 28)
-	title.add_theme_font_size_override('font_size', 14)
-	title.add_theme_color_override('font_color', COLOR_TEXT_SUB)
-	add_child(title)
+	# ノートテクスチャ（薄く）
+	var nb_path = 'res://assets/backgrounds/notebook_texture.png'
+	var nb_abs = ProjectSettings.globalize_path(nb_path)
+	var nb_img = Image.new()
+	if nb_img.load(nb_abs) == OK:
+		var nb_tex = TextureRect.new()
+		nb_tex.texture = ImageTexture.create_from_image(nb_img)
+		nb_tex.anchor_right = 1.0
+		nb_tex.anchor_bottom = 1.0
+		nb_tex.stretch_mode = TextureRect.STRETCH_TILE
+		nb_tex.modulate.a = 0.3
+		nb_tex.z_index = -1
+		nb_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(nb_tex)
+
+	# ─── 左半分: 転校生情報パネル ───
+	_info_left = Panel.new()
+	_info_left.name = 'InfoLeft'
+	_info_left.anchor_left   = 0.0
+	_info_left.anchor_right  = 0.45
+	_info_left.anchor_top    = 0.0
+	_info_left.anchor_bottom = 1.0
+	_info_left.offset_left   = 8
+	_info_left.offset_right  = -8
+	_info_left.offset_top    = 8
+	_info_left.offset_bottom = -8
+	var left_style = StyleBoxFlat.new()
+	left_style.bg_color = Color(0.995, 0.998, 0.970, 0.95)
+	left_style.border_color = COLOR_EMPTY_BDR
+	left_style.set_border_width_all(2)
+	left_style.corner_radius_top_left = 14
+	left_style.corner_radius_top_right = 14
+	left_style.corner_radius_bottom_left = 14
+	left_style.corner_radius_bottom_right = 14
+	left_style.shadow_color = Color(0, 0, 0, 0.08)
+	left_style.shadow_size = 6
+	_info_left.add_theme_stylebox_override('panel', left_style)
+	add_child(_info_left)
+
+	var left_vbox = VBoxContainer.new()
+	left_vbox.name = 'LeftVBox'
+	left_vbox.anchor_right = 1.0
+	left_vbox.anchor_bottom = 1.0
+	left_vbox.offset_left = 16
+	left_vbox.offset_right = -16
+	left_vbox.offset_top = 16
+	left_vbox.offset_bottom = -16
+	left_vbox.add_theme_constant_override('separation', 10)
+	_info_left.add_child(left_vbox)
+
+	# 上部: 日付・テスト
+	var day_row = HBoxContainer.new()
+	day_row.add_theme_constant_override('separation', 8)
+	left_vbox.add_child(day_row)
+	var day_lbl = Label.new()
+	day_lbl.name = 'DayLabel'
+	day_lbl.add_theme_font_size_override('font_size', 22)
+	day_lbl.add_theme_color_override('font_color', COLOR_TEXT)
+	day_row.add_child(day_lbl)
+	var test_lbl = Label.new()
+	test_lbl.name = 'TestLabel'
+	test_lbl.add_theme_font_size_override('font_size', 18)
+	test_lbl.add_theme_color_override('font_color', COLOR_ACCENT)
+	day_row.add_child(test_lbl)
+
+	var placed_lbl = Label.new()
+	placed_lbl.name = 'PlacedLabel'
+	placed_lbl.add_theme_font_size_override('font_size', 16)
+	placed_lbl.add_theme_color_override('font_color', COLOR_SUB)
+	left_vbox.add_child(placed_lbl)
+
+	left_vbox.add_child(_make_sep())
+
+	# 転校生カード
+	var card_title = Label.new()
+	card_title.name = 'CardTitle'
+	card_title.text = '今日の転校生'
+	card_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_title.add_theme_font_size_override('font_size', 20)
+	card_title.add_theme_color_override('font_color', COLOR_SUB)
+	left_vbox.add_child(card_title)
+
+	# ポートレート（大きく）
+	_student_portrait = TextureRect.new()
+	_student_portrait.name = 'Portrait'
+	_student_portrait.custom_minimum_size = Vector2(160, 160)
+	_student_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_student_portrait.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	_student_portrait.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	left_vbox.add_child(_student_portrait)
+
+	# 名前
+	_student_name_lbl = Label.new()
+	_student_name_lbl.name = 'StudentName'
+	_student_name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_student_name_lbl.add_theme_font_size_override('font_size', 28)
+	_student_name_lbl.add_theme_color_override('font_color', COLOR_TEXT)
+	left_vbox.add_child(_student_name_lbl)
+
+	# タイプ・レア度
+	var meta_row = HBoxContainer.new()
+	meta_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	meta_row.add_theme_constant_override('separation', 12)
+	left_vbox.add_child(meta_row)
+	_student_type_lbl = Label.new()
+	_student_type_lbl.add_theme_font_size_override('font_size', 20)
+	_student_type_lbl.add_theme_color_override('font_color', COLOR_ACCENT)
+	meta_row.add_child(_student_type_lbl)
+	_student_rarity_lbl = Label.new()
+	_student_rarity_lbl.add_theme_font_size_override('font_size', 20)
+	_student_rarity_lbl.add_theme_color_override('font_color', Color(0.9, 0.7, 0.1))
+	meta_row.add_child(_student_rarity_lbl)
+
+	left_vbox.add_child(_make_sep())
+
+	# パラメータ
+	_student_params_lbl = Label.new()
+	_student_params_lbl.name = 'Params'
+	_student_params_lbl.add_theme_font_size_override('font_size', 18)
+	_student_params_lbl.add_theme_color_override('font_color', COLOR_TEXT)
+	left_vbox.add_child(_student_params_lbl)
+
+	# 特殊能力
+	_student_ability_lbl = Label.new()
+	_student_ability_lbl.name = 'Ability'
+	_student_ability_lbl.add_theme_font_size_override('font_size', 18)
+	_student_ability_lbl.add_theme_color_override('font_color', Color(0.557, 0.271, 0.678))
+	_student_ability_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left_vbox.add_child(_student_ability_lbl)
+
+	# ヒント
+	_student_hint_lbl = Label.new()
+	_student_hint_lbl.name = 'Hint'
+	_student_hint_lbl.add_theme_font_size_override('font_size', 16)
+	_student_hint_lbl.add_theme_color_override('font_color', COLOR_SUB)
+	_student_hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left_vbox.add_child(_student_hint_lbl)
+
+	left_vbox.add_child(_make_sep())
+
+	# 配置指示
+	_placement_hint_lbl = Label.new()
+	_placement_hint_lbl.name = 'PlacementHint'
+	_placement_hint_lbl.text = ''
+	_placement_hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_placement_hint_lbl.add_theme_font_size_override('font_size', 20)
+	_placement_hint_lbl.add_theme_color_override('font_color', Color(0.9, 0.45, 0.1))
+	_placement_hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left_vbox.add_child(_placement_hint_lbl)
+
+	# CLASS_PHASE オーバーレイ（授業科目表示）
+	_class_overlay = Panel.new()
+	_class_overlay.name = 'ClassOverlay'
+	_class_overlay.anchor_left   = 0.0
+	_class_overlay.anchor_right  = 0.45
+	_class_overlay.anchor_top    = 0.0
+	_class_overlay.anchor_bottom = 1.0
+	_class_overlay.offset_left   = 8
+	_class_overlay.offset_right  = -8
+	_class_overlay.offset_top    = 8
+	_class_overlay.offset_bottom = -8
+	var ov_style = StyleBoxFlat.new()
+	ov_style.bg_color = Color(0.95, 0.97, 0.88, 0.97)
+	ov_style.border_color = COLOR_EMPTY_BDR
+	ov_style.set_border_width_all(2)
+	ov_style.corner_radius_top_left = 14
+	ov_style.corner_radius_top_right = 14
+	ov_style.corner_radius_bottom_left = 14
+	ov_style.corner_radius_bottom_right = 14
+	_class_overlay.add_theme_stylebox_override('panel', ov_style)
+	_class_overlay.visible = false
+	add_child(_class_overlay)
+
+	var ov_margin = MarginContainer.new()
+	ov_margin.anchor_right = 1.0
+	ov_margin.anchor_bottom = 1.0
+	ov_margin.add_theme_constant_override('margin_left', 24)
+	ov_margin.add_theme_constant_override('margin_right', 24)
+	ov_margin.add_theme_constant_override('margin_top', 24)
+	ov_margin.add_theme_constant_override('margin_bottom', 24)
+	_class_overlay.add_child(ov_margin)
+
+	var ov_vbox = VBoxContainer.new()
+	ov_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	ov_vbox.add_theme_constant_override('separation', 18)
+	ov_margin.add_child(ov_vbox)
+
+	var subject_title_lbl = Label.new()
+	subject_title_lbl.name = 'SubjectTitle'
+	subject_title_lbl.text = '今日の授業'
+	subject_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subject_title_lbl.add_theme_font_size_override('font_size', 22)
+	subject_title_lbl.add_theme_color_override('font_color', COLOR_SUB)
+	ov_vbox.add_child(subject_title_lbl)
+
+	var subject_lbl = Label.new()
+	subject_lbl.name = 'SubjectLabel'
+	subject_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subject_lbl.add_theme_font_size_override('font_size', 52)
+	subject_lbl.add_theme_color_override('font_color', COLOR_TEXT)
+	ov_vbox.add_child(subject_lbl)
+
+	var test_badge = Label.new()
+	test_badge.name = 'TestBadge'
+	test_badge.text = ''
+	test_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	test_badge.add_theme_font_size_override('font_size', 24)
+	test_badge.add_theme_color_override('font_color', Color(0.9, 0.55, 0.1))
+	ov_vbox.add_child(test_badge)
+
+	var advance_btn = Button.new()
+	advance_btn.name = 'AdvanceBtn'
+	advance_btn.text = '授業開始！'
+	advance_btn.add_theme_font_size_override('font_size', 28)
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = COLOR_ACCENT
+	btn_style.corner_radius_top_left = 12
+	btn_style.corner_radius_top_right = 12
+	btn_style.corner_radius_bottom_left = 12
+	btn_style.corner_radius_bottom_right = 12
+	advance_btn.add_theme_stylebox_override('normal', btn_style)
+	var btn_hover = btn_style.duplicate()
+	btn_hover.bg_color = COLOR_ACCENT.lightened(0.15)
+	advance_btn.add_theme_stylebox_override('hover', btn_hover)
+	advance_btn.add_theme_color_override('font_color', Color.WHITE)
+	advance_btn.pressed.connect(_on_advance_lesson_pressed)
+	ov_vbox.add_child(advance_btn)
+
+	# ─── 右半分: グリッド ───
+	var right_panel = Control.new()
+	right_panel.name = 'RightPanel'
+	right_panel.anchor_left   = 0.46
+	right_panel.anchor_right  = 1.0
+	right_panel.anchor_top    = 0.0
+	right_panel.anchor_bottom = 1.0
+	add_child(right_panel)
+
+	var grid_title = Label.new()
+	grid_title.name = 'GridTitle'
+	grid_title.text = '教室（4×4席）'
+	grid_title.position = Vector2(10, 10)
+	grid_title.add_theme_font_size_override('font_size', 22)
+	grid_title.add_theme_color_override('font_color', COLOR_SUB)
+	right_panel.add_child(grid_title)
+
+	# グリッドを右パネル内に中央配置
+	var grid_total_w = GRID_COLS * (CELL_SIZE + 8) - 8
+	var grid_total_h = GRID_ROWS * (CELL_SIZE + 8) - 8
+	var grid_x = 20
+	var grid_y = 48
+
+	_cells = []
 	for i in range(GRID_ROWS * GRID_COLS):
-		var cell = _create_cell(i, i / GRID_COLS, i % GRID_COLS)
-		add_child(cell)
+		var row = i / GRID_COLS
+		var col = i % GRID_COLS
+		var cell = _create_cell(i, row, col, grid_x, grid_y)
+		right_panel.add_child(cell)
 		_cells.append(cell)
 
-func _create_cell(index: int, row: int, col: int) -> Control:
+	# ホバーツールチップ
+	_tooltip = Panel.new()
+	_tooltip.name = 'Tooltip'
+	var tt_style = StyleBoxFlat.new()
+	tt_style.bg_color = Color(0.98, 0.98, 0.95, 0.97)
+	tt_style.border_color = COLOR_EMPTY_BDR
+	tt_style.set_border_width_all(2)
+	tt_style.corner_radius_top_left = 10
+	tt_style.corner_radius_top_right = 10
+	tt_style.corner_radius_bottom_left = 10
+	tt_style.corner_radius_bottom_right = 10
+	tt_style.shadow_color = Color(0, 0, 0, 0.15)
+	tt_style.shadow_size = 6
+	_tooltip.add_theme_stylebox_override('panel', tt_style)
+	_tooltip.visible = false
+	_tooltip.z_index = 50
+	_tooltip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tooltip.size = Vector2(220, 130)
+	add_child(_tooltip)
+
+	var tt_vbox = VBoxContainer.new()
+	tt_vbox.name = 'TT_VBox'
+	tt_vbox.anchor_right = 1.0
+	tt_vbox.anchor_bottom = 1.0
+	tt_vbox.offset_left = 10
+	tt_vbox.offset_right = -10
+	tt_vbox.offset_top = 8
+	tt_vbox.offset_bottom = -8
+	tt_vbox.add_theme_constant_override('separation', 4)
+	tt_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tooltip.add_child(tt_vbox)
+
+	for lbl_name in ['TT_Name', 'TT_Type', 'TT_Params', 'TT_Fulfill', 'TT_Ability']:
+		var lbl = Label.new()
+		lbl.name = lbl_name
+		lbl.add_theme_font_size_override('font_size', 16)
+		lbl.add_theme_color_override('font_color', COLOR_TEXT)
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tt_vbox.add_child(lbl)
+
+func _create_cell(index: int, row: int, col: int, off_x: int, off_y: int) -> Control:
 	var panel = Panel.new()
 	panel.name = 'Cell_%d' % index
-	panel.position = Vector2(GRID_OFFSET_X + col * (CELL_SIZE + 6), GRID_OFFSET_Y + row * (CELL_SIZE + 6))
+	panel.position = Vector2(off_x + col * (CELL_SIZE + 8), off_y + row * (CELL_SIZE + 8))
 	panel.size = Vector2(CELL_SIZE, CELL_SIZE)
 	panel.set_meta('seat_index', index)
 	var style = StyleBoxFlat.new()
 	style.bg_color = COLOR_EMPTY_BG
-	style.border_color = COLOR_EMPTY_BORDER
+	style.border_color = COLOR_EMPTY_BDR
 	style.set_border_width_all(2)
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_bottom_right = 10
 	panel.add_theme_stylebox_override('panel', style)
 	panel.clip_contents = true
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -103,153 +393,116 @@ func _create_cell(index: int, row: int, col: int) -> Control:
 	num_label.name = 'NumLabel'
 	num_label.text = str(index + 1)
 	num_label.position = Vector2(4, 2)
-	num_label.add_theme_font_size_override('font_size', 9)
-	num_label.add_theme_color_override('font_color', COLOR_EMPTY_BORDER)
+	num_label.add_theme_font_size_override('font_size', 14)
+	num_label.add_theme_color_override('font_color', COLOR_EMPTY_BDR)
 	panel.add_child(num_label)
 	return panel
-
-func _build_info_panel() -> void:
-	var bar_x = GRID_OFFSET_X + GRID_COLS * (CELL_SIZE + 6) + 30
-	var panel = VBoxContainer.new()
-	panel.name = 'InfoPanel'
-	panel.position = Vector2(bar_x, GRID_OFFSET_Y)
-	panel.size = Vector2(230, 300)
-	panel.add_theme_constant_override('separation', 14)
-	add_child(panel)
-
-	var title = Label.new()
-	title.text = 'クラス情報'
-	title.add_theme_font_size_override('font_size', 14)
-	title.add_theme_color_override('font_color', COLOR_TEXT_SUB)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	panel.add_child(title)
-
-	var day_lbl = Label.new()
-	day_lbl.name = 'DayLabel'
-	day_lbl.add_theme_font_size_override('font_size', 18)
-	day_lbl.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
-	day_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	panel.add_child(day_lbl)
-
-	var test_lbl = Label.new()
-	test_lbl.name = 'TestLabel'
-	test_lbl.add_theme_font_size_override('font_size', 13)
-	test_lbl.add_theme_color_override('font_color', COLOR_TEXT_SUB)
-	test_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	panel.add_child(test_lbl)
-
-	var placed_lbl = Label.new()
-	placed_lbl.name = 'PlacedLabel'
-	placed_lbl.add_theme_font_size_override('font_size', 12)
-	placed_lbl.add_theme_color_override('font_color', COLOR_TEXT_SUB)
-	placed_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	panel.add_child(placed_lbl)
-
-func _build_class_overlay() -> void:
-	# CLASS_PHASE に表示するオーバーレイ
-	_class_overlay = Panel.new()
-	_class_overlay.name = 'ClassOverlay'
-	_class_overlay.anchor_left   = 0.5
-	_class_overlay.anchor_top    = 0.5
-	_class_overlay.anchor_right  = 0.5
-	_class_overlay.anchor_bottom = 0.5
-	_class_overlay.offset_left   = -200
-	_class_overlay.offset_right  = 200
-	_class_overlay.offset_top    = -110
-	_class_overlay.offset_bottom = 110
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.14, 0.22, 0.95)
-	style.corner_radius_top_left = 14
-	style.corner_radius_top_right = 14
-	style.corner_radius_bottom_left = 14
-	style.corner_radius_bottom_right = 14
-	style.set_border_width_all(2)
-	style.border_color = Color(0.4, 0.5, 0.8, 0.5)
-	_class_overlay.add_theme_stylebox_override('panel', style)
-	_class_overlay.visible = false
-	add_child(_class_overlay)
-
-	var margin = MarginContainer.new()
-	margin.anchor_right = 1.0
-	margin.anchor_bottom = 1.0
-	margin.add_theme_constant_override('margin_left', 24)
-	margin.add_theme_constant_override('margin_right', 24)
-	margin.add_theme_constant_override('margin_top', 18)
-	margin.add_theme_constant_override('margin_bottom', 18)
-	_class_overlay.add_child(margin)
-
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override('separation', 14)
-	margin.add_child(vbox)
-
-	var subject_title = Label.new()
-	subject_title.name = 'SubjectTitle'
-	subject_title.text = '今日の授業'
-	subject_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subject_title.add_theme_font_size_override('font_size', 14)
-	subject_title.add_theme_color_override('font_color', Color(0.65, 0.70, 0.80))
-	vbox.add_child(subject_title)
-
-	var subject_lbl = Label.new()
-	subject_lbl.name = 'SubjectLabel'
-	subject_lbl.text = '📚 勉強'
-	subject_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subject_lbl.add_theme_font_size_override('font_size', 28)
-	subject_lbl.add_theme_color_override('font_color', Color.WHITE)
-	vbox.add_child(subject_lbl)
-
-	var test_badge = Label.new()
-	test_badge.name = 'TestBadge'
-	test_badge.text = ''
-	test_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	test_badge.add_theme_font_size_override('font_size', 14)
-	test_badge.add_theme_color_override('font_color', Color(1.0, 0.8, 0.2))
-	vbox.add_child(test_badge)
-
-	var advance_btn = Button.new()
-	advance_btn.name = 'AdvanceBtn'
-	advance_btn.text = '授業開始！'
-	advance_btn.add_theme_font_size_override('font_size', 16)
-	var btn_style = StyleBoxFlat.new()
-	btn_style.bg_color = Color(0.290, 0.565, 0.851)
-	btn_style.corner_radius_top_left = 10
-	btn_style.corner_radius_top_right = 10
-	btn_style.corner_radius_bottom_left = 10
-	btn_style.corner_radius_bottom_right = 10
-	advance_btn.add_theme_stylebox_override('normal', btn_style)
-	advance_btn.add_theme_color_override('font_color', Color.WHITE)
-	advance_btn.pressed.connect(_on_advance_lesson_pressed)
-	vbox.add_child(advance_btn)
 
 func _on_phase_changed(phase: GameManager.Phase) -> void:
 	visible = (phase == GameManager.Phase.START_PHASE or phase == GameManager.Phase.CLASS_PHASE)
 	if _class_overlay:
 		_class_overlay.visible = (phase == GameManager.Phase.CLASS_PHASE)
+	if _info_left:
+		_info_left.visible = (phase == GameManager.Phase.START_PHASE)
 	if phase == GameManager.Phase.CLASS_PHASE:
 		_refresh_class_overlay()
-	_update_info_panel()
+	elif phase == GameManager.Phase.START_PHASE:
+		_update_grid_display()
+		_update_info_panel()
+		# 配置指示を更新
+		if _placement_hint_lbl:
+			if not _drag_student.is_empty():
+				_placement_hint_lbl.text = '► 右の席をクリックして\n　 転校生を座らせよう！'
+			else:
+				_placement_hint_lbl.text = ''
 
 func _refresh_class_overlay() -> void:
 	if _class_overlay == null:
 		return
-	var subject = GameManager.today_student.get('_subject', '')
 	var subject_map = { 'study': '📚 勉強', 'sports': '⚽ 運動', 'art': '🎨 芸術' }
 	var subject_lbl = _class_overlay.get_node_or_null('MarginContainer/VBoxContainer/SubjectLabel')
 	if subject_lbl:
-		subject_lbl.text = subject_map.get(GameManager.last_day_result.get('subject', 'study'), '📚 勉強')
-
+		subject_lbl.text = subject_map.get(GameManager.today_subject, '📚 勉強')
 	var is_test = LessonManager.is_test_day(GameManager.current_day)
 	var test_badge = _class_overlay.get_node_or_null('MarginContainer/VBoxContainer/TestBadge')
 	if test_badge:
 		test_badge.text = '📝 今日はテスト！' if is_test else ''
 
-	# subject を last_day_result が空の場合は先取りして pick する
-	if subject_lbl:
-		var picked = LessonManager.pick_subject()
-		subject_lbl.text = subject_map.get(picked, '📚 勉強')
-
 func _on_student_drawn(student_data: Dictionary) -> void:
 	_drag_student = student_data
+	_update_student_panel(student_data)
+	if _placement_hint_lbl:
+		_placement_hint_lbl.text = '► 右の席をクリックして\n　 転校生を座らせよう！'
+	# 転校生登場演出
+	_animate_student_arrival()
+
+func _animate_student_arrival() -> void:
+	if _info_left == null:
+		return
+	_info_left.modulate.a = 0.0
+	var tween = create_tween()
+	tween.tween_property(_info_left, 'modulate:a', 1.0, 0.5).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(_info_left, 'position:x', _info_left.position.x, 0.01)
+	# ポートレートをポーンと拡大縮小
+	if _student_portrait:
+		_student_portrait.scale = Vector2(0.7, 0.7)
+		var tw2 = create_tween()
+		tw2.tween_property(_student_portrait, 'scale', Vector2(1.0, 1.0), 0.4).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+func _update_student_panel(student: Dictionary) -> void:
+	if student.is_empty():
+		if _student_name_lbl:
+			_student_name_lbl.text = '転校生を待ち中...'
+		return
+
+	var char_id = student.get('id', '')
+
+	# ポートレート
+	if _student_portrait:
+		var sprite_path = 'res://assets/sprites/' + char_id + '_48x48.png'
+		var tex = _load_texture(sprite_path)
+		_student_portrait.texture = tex
+
+	if _student_name_lbl:
+		_student_name_lbl.text = student.get('name', '？')
+
+	var stype = student.get('type', '')
+	if _student_type_lbl:
+		_student_type_lbl.text = TYPE_ICONS.get(stype, '') + ' ' + TYPE_NAMES.get(stype, stype)
+
+	if _student_rarity_lbl:
+		var stars = ''
+		for _i in range(student.get('rarity', 1)):
+			stars += '★'
+		_student_rarity_lbl.text = stars
+
+	if _student_params_lbl:
+		_student_params_lbl.text = (
+			'📚勉強: %d　⚽運動: %d　🎨芸術: %d' % [
+				student.get('initial_study', 0),
+				student.get('initial_sports', 0),
+				student.get('initial_art', 0)
+			]
+		)
+
+	if _student_ability_lbl:
+		var ability_ids = student.get('abilities', [])
+		var ability_lines = []
+		for ab_id in ability_ids:
+			var ab = _get_ability_desc(ab_id)
+			if not ab.is_empty():
+				ability_lines.append(ab)
+		_student_ability_lbl.text = '✨ ' + '\n'.join(ability_lines) if not ability_lines.is_empty() else ''
+
+	if _student_hint_lbl:
+		_student_hint_lbl.text = '💬 ' + student.get('hint_text', '')
+
+func _get_ability_desc(ability_id: String) -> String:
+	# AbilityEngine の _ability_map にアクセス
+	var ab = AbilityEngine._ability_map.get(ability_id, {})
+	if ab.is_empty():
+		return ability_id
+	return ab.get('icon', '') + ' ' + ab.get('name', ability_id) + ': ' + ab.get('description', '')
 
 func _on_cell_gui_input(event: InputEvent, seat_index: int) -> void:
 	if GameManager.current_phase != GameManager.Phase.START_PHASE:
@@ -267,16 +520,22 @@ func _confirm_placement(seat_index: int) -> void:
 	if board.place_student(seat_index, _drag_student):
 		placement_confirmed.emit(seat_index, _drag_student)
 		_drag_student = {}
+		if _placement_hint_lbl:
+			_placement_hint_lbl.text = ''
 		_update_grid_display()
 		GameManager.go_to_class_phase(board, true)
 
 func _on_cell_hover_enter(seat_index: int) -> void:
-	if _drag_student.is_empty() or not board.is_empty(seat_index) or seat_index == board.player_seat:
-		return
-	_highlight_cell(seat_index, true)
+	# ハイライト
+	if not _drag_student.is_empty() and board.is_empty(seat_index) and seat_index != board.player_seat:
+		_highlight_cell(seat_index, true)
+	# ツールチップ
+	_show_tooltip(seat_index)
 
 func _on_cell_hover_exit(seat_index: int) -> void:
 	_highlight_cell(seat_index, false)
+	if _tooltip:
+		_tooltip.visible = false
 
 func _highlight_cell(seat_index: int, highlight: bool) -> void:
 	if seat_index < 0 or seat_index >= _cells.size():
@@ -288,10 +547,63 @@ func _highlight_cell(seat_index: int, highlight: bool) -> void:
 		style.border_color = COLOR_PREVIEW_HL
 		style.set_border_width_all(3)
 	else:
-		style.bg_color = COLOR_EMPTY_BG if board.is_empty(seat_index) else COLOR_OCCUPIED_BG
-		style.border_color = COLOR_EMPTY_BORDER
-		style.set_border_width_all(2)
+		if seat_index == board.player_seat:
+			style.bg_color = Color(0.87, 0.93, 0.99)
+			style.border_color = COLOR_PLAYER_BDR
+			style.set_border_width_all(3)
+		elif board.is_empty(seat_index):
+			style.bg_color = COLOR_EMPTY_BG
+			style.border_color = COLOR_EMPTY_BDR
+			style.set_border_width_all(2)
+		else:
+			style.bg_color = COLOR_OCCUPIED
+			style.border_color = COLOR_OCCUPIED_BDR
+			style.set_border_width_all(2)
 	panel.add_theme_stylebox_override('panel', style)
+
+func _show_tooltip(seat_index: int) -> void:
+	if _tooltip == null:
+		return
+	_tooltip.visible = false
+
+	var char_id: String = ''
+	var char_name: String = ''
+	var is_player = (seat_index == board.player_seat)
+
+	if is_player:
+		char_id = 'player'
+		char_name = GameManager.player_name if not GameManager.player_name.is_empty() else 'あなた'
+	else:
+		var student = board.get_student_at(seat_index)
+		if student == null:
+			return
+		char_id = student.get('id', '')
+		char_name = student.get('name', '？')
+
+	var state = CharacterState.get_state(char_id)
+	if state.is_empty():
+		return
+
+	var tt_name    = _tooltip.get_node_or_null('TT_VBox/TT_Name')
+	var tt_type    = _tooltip.get_node_or_null('TT_VBox/TT_Type')
+	var tt_params  = _tooltip.get_node_or_null('TT_VBox/TT_Params')
+	var tt_fulfill = _tooltip.get_node_or_null('TT_VBox/TT_Fulfill')
+	if tt_name == null or tt_type == null or tt_params == null or tt_fulfill == null:
+		return
+
+	tt_name.text = char_name
+	var stype = state.get('type', '')
+	tt_type.text = TYPE_ICONS.get(stype, '') + ' ' + TYPE_NAMES.get(stype, stype)
+	tt_params.text = '📚%d ⚽%d 🎨%d' % [state.get('study', 0), state.get('sports', 0), state.get('art', 0)]
+	var fulfill = state.get('fulfillment', 0)
+	var f_color = Color(0.2, 0.7, 0.3) if fulfill >= 0 else Color(0.8, 0.2, 0.2)
+	tt_fulfill.add_theme_color_override('font_color', f_color)
+	tt_fulfill.text = '充実度: %s%d' % ['+' if fulfill >= 0 else '', fulfill]
+
+	# ホバー位置をマウス付近に
+	var mp = get_global_mouse_position()
+	_tooltip.global_position = mp + Vector2(16, 8)
+	_tooltip.visible = true
 
 func _on_advance_lesson_pressed() -> void:
 	GameManager.advance_day(board)
@@ -301,25 +613,23 @@ func _on_board_changed() -> void:
 	_update_info_panel()
 
 func _update_info_panel() -> void:
-	var panel = get_node_or_null('InfoPanel')
-	if panel == null:
-		return
-	var day_lbl = panel.get_node_or_null('DayLabel')
+	var day_lbl = _info_left.get_node_or_null('LeftVBox/HBoxContainer/DayLabel') if _info_left else null
 	if day_lbl:
 		day_lbl.text = '📅 %d日目 / 30日' % GameManager.current_day
-	var test_lbl = panel.get_node_or_null('TestLabel')
+
+	var test_lbl = _info_left.get_node_or_null('LeftVBox/HBoxContainer/TestLabel') if _info_left else null
 	if test_lbl:
-		var next_test = _days_to_next_test()
-		if next_test == 0:
-			test_lbl.text = '📝 今日はテスト！'
-		elif next_test > 0:
-			test_lbl.text = 'テストまで %d日' % next_test
+		var next = _days_to_next_test()
+		if next == 0:
+			test_lbl.text = '📝テスト！'
+		elif next > 0:
+			test_lbl.text = '（テストまで %d日）' % next
 		else:
-			test_lbl.text = '全テスト終了'
-	var placed_lbl = panel.get_node_or_null('PlacedLabel')
+			test_lbl.text = ''
+
+	var placed_lbl = _info_left.get_node_or_null('LeftVBox/PlacedLabel') if _info_left else null
 	if placed_lbl:
-		var count = board.get_all_placed().size()
-		placed_lbl.text = '在席: %d / 15名' % count
+		placed_lbl.text = '在席: %d / 15名' % board.get_all_placed().size()
 
 func _days_to_next_test() -> int:
 	var day = GameManager.current_day
@@ -337,77 +647,118 @@ func _update_grid_display() -> void:
 
 		# プレイヤー席
 		if i == board.player_seat:
+			var player_sprite_path = 'res://assets/sprites/player_' + GameManager.player_gender + '_48x48.png'
+			var player_tex = _load_texture(player_sprite_path)
+			if player_tex:
+				var tex_rect = TextureRect.new()
+				tex_rect.texture = player_tex
+				tex_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+				tex_rect.offset_left   = 2
+				tex_rect.offset_top    = 2
+				tex_rect.offset_right  = -2
+				tex_rect.offset_bottom = -20
+				tex_rect.stretch_mode  = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				tex_rect.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+				cell.add_child(tex_rect)
 			var lbl = Label.new()
 			lbl.text = GameManager.player_name if not GameManager.player_name.is_empty() else 'あなた'
-			lbl.position = Vector2(0, CELL_SIZE / 2 - 8)
-			lbl.size = Vector2(CELL_SIZE, 18)
+			lbl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+			lbl.offset_top = -20
 			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			lbl.add_theme_font_size_override('font_size', 9)
-			lbl.add_theme_color_override('font_color', Color(0.290, 0.565, 0.851))
+			lbl.add_theme_font_size_override('font_size', 13)
+			lbl.add_theme_color_override('font_color', COLOR_ACCENT)
+			lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			cell.add_child(lbl)
-			_set_cell_style(cell, true)
+			_set_cell_style(cell, 'player')
 			continue
 
 		var student = board.get_student_at(i)
 		if student == null:
-			_set_cell_style(cell, false)
+			_set_cell_style(cell, 'empty')
 			continue
-		_set_cell_style(cell, true)
+		_set_cell_style(cell, 'occupied')
 
-		# タイプアイコン（左上）
 		var char_id = student.get('id', '')
-		var state = CharacterState.get_state(char_id)
-		var char_type = state.get('type', student.get('type', ''))
-		if char_type != '':
-			var type_lbl = Label.new()
-			type_lbl.text = TYPE_ICONS.get(char_type, '')
-			type_lbl.position = Vector2(2, 14)
-			type_lbl.add_theme_font_size_override('font_size', 10)
-			cell.add_child(type_lbl)
 
-		# スプライト
+		# スプライト（アンカーベースで確実に配置）
 		var sprite_path = 'res://assets/sprites/' + char_id + '_48x48.png'
 		var sprite_tex = _load_texture(sprite_path)
 		if sprite_tex:
 			var tex_rect = TextureRect.new()
 			tex_rect.texture = sprite_tex
-			tex_rect.size = Vector2(CELL_SIZE - 8, CELL_SIZE - 28)
-			tex_rect.position = Vector2(4, 4)
-			tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tex_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			tex_rect.offset_left   = 2
+			tex_rect.offset_top    = 2
+			tex_rect.offset_right  = -2
+			tex_rect.offset_bottom = -20
+			tex_rect.stretch_mode  = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tex_rect.mouse_filter  = Control.MOUSE_FILTER_IGNORE
 			cell.add_child(tex_rect)
 
-		# 名前
+		# 名前ラベル（下部 20px）
 		var name_lbl = Label.new()
 		name_lbl.text = student.get('name', '？')
-		name_lbl.position = Vector2(0, CELL_SIZE - 22)
-		name_lbl.size = Vector2(CELL_SIZE, 14)
-		name_lbl.add_theme_font_size_override('font_size', 8)
-		name_lbl.add_theme_color_override('font_color', COLOR_TEXT_MAIN)
+		name_lbl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		name_lbl.offset_top = -20
+		name_lbl.add_theme_font_size_override('font_size', 13)
+		name_lbl.add_theme_color_override('font_color', COLOR_TEXT)
 		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cell.add_child(name_lbl)
 
-		# 充実度バー（下部4px）
+		# 充実度バー（アンカーで最下部に配置）
+		var state = CharacterState.get_state(char_id)
 		var fulfillment = state.get('fulfillment', 0)
 		var bar_bg = ColorRect.new()
-		bar_bg.color = Color(0.3, 0.3, 0.3, 0.5)
-		bar_bg.size = Vector2(CELL_SIZE, 4)
-		bar_bg.position = Vector2(0, CELL_SIZE - 4)
+		bar_bg.color = Color(0.8, 0.8, 0.8, 0.5)
+		bar_bg.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		bar_bg.offset_top = -5
+		bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cell.add_child(bar_bg)
 		var f_ratio = clampf((fulfillment + 20.0) / 50.0, 0.0, 1.0)
 		var bar_fill = ColorRect.new()
 		bar_fill.color = Color(0.2, 0.8, 0.4) if fulfillment >= 0 else Color(0.8, 0.2, 0.2)
-		bar_fill.size = Vector2(CELL_SIZE * f_ratio, 4)
-		bar_fill.position = Vector2(0, CELL_SIZE - 4)
+		bar_fill.anchor_left   = 0.0
+		bar_fill.anchor_top    = 1.0
+		bar_fill.anchor_right  = f_ratio
+		bar_fill.anchor_bottom = 1.0
+		bar_fill.offset_top    = -5
+		bar_fill.mouse_filter  = Control.MOUSE_FILTER_IGNORE
 		cell.add_child(bar_fill)
 
-func _set_cell_style(cell: Panel, occupied: bool) -> void:
+func _set_cell_style(cell: Panel, state_str: String) -> void:
 	var style = cell.get_theme_stylebox('panel').duplicate()
-	style.bg_color = COLOR_OCCUPIED_BG if occupied else COLOR_EMPTY_BG
-	style.border_color = Color(0.357, 0.682, 0.369, 0.6) if occupied else COLOR_EMPTY_BORDER
+	match state_str:
+		'player':
+			style.bg_color = Color(0.87, 0.93, 0.99)
+			style.border_color = COLOR_PLAYER_BDR
+			style.set_border_width_all(3)
+		'occupied':
+			style.bg_color = COLOR_OCCUPIED
+			style.border_color = COLOR_OCCUPIED_BDR
+			style.set_border_width_all(2)
+		_:  # empty
+			style.bg_color = COLOR_EMPTY_BG
+			style.border_color = COLOR_EMPTY_BDR
+			style.set_border_width_all(2)
 	cell.add_theme_stylebox_override('panel', style)
 
+func _make_sep() -> HSeparator:
+	var sep = HSeparator.new()
+	var st = StyleBoxFlat.new()
+	st.bg_color = COLOR_EMPTY_BDR
+	st.content_margin_top = 1
+	st.content_margin_bottom = 1
+	sep.add_theme_stylebox_override('separator', st)
+	return sep
+
 func _load_texture(res_path: String) -> Texture2D:
+	# Godotリソースシステム（エディタでインポート済みの場合）
+	if ResourceLoader.exists(res_path):
+		var res = ResourceLoader.load(res_path)
+		if res is Texture2D:
+			return res as Texture2D
+	# フォールバック: Image.load で直接読み込み
 	var abs_path = ProjectSettings.globalize_path(res_path)
 	var img = Image.new()
 	if img.load(abs_path) == OK:

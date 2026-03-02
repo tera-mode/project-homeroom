@@ -99,6 +99,13 @@ func get_students_by_category(category: String) -> Array:
 func get_all_student_ids() -> Array:
 	return _all_students.map(func(s): return s["id"])
 
+# 全転校生データを返す（初期クラスメイト選択等に使用）
+func get_all_students() -> Array:
+	var result = []
+	for s in _all_students:
+		result.append(s.duplicate(true))
+	return result
+
 # 周回数を設定する
 func set_cycle(cycle: int) -> void:
 	current_cycle = cycle

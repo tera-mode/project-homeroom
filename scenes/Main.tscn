@@ -104,8 +104,8 @@ func _show_phase(phase: GameManager.Phase) -> void:
 	if _ending_screen:   _ending_screen.visible    = (phase == GameManager.Phase.ENDING)
 
 func _on_player_setup_complete(name: String, gender: String, p_type: String,
-		like_type: String, dislike_type: String, seat: int) -> void:
-	GameManager.complete_player_setup(name, gender, p_type, like_type, dislike_type, seat)
+		like_type: String, dislike_type: String, skill: String) -> void:
+	GameManager.complete_player_setup(name, gender, p_type, like_type, dislike_type, skill)
 
 func _on_cinematic_requested(scene_id: String) -> void:
 	var is_male = GameManager.player_gender == 'male'

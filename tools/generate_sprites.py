@@ -34,28 +34,32 @@ RAW_DIR = Path("assets/sprites/raw")
 # ── キャラクター定義 ───────────────────────────────────
 CHARACTERS = [
     # 転校生9体
-    {"id": "student_rina",  "desc": "pink twin-tails, sparkly eyes, ribbon accessories",           "adj": "cheerful sparkling"},
-    {"id": "student_kenta", "desc": "short dark hair, glasses, tidy uniform",                       "adj": "serious studious"},
-    {"id": "student_ren",   "desc": "spiky dyed-brown hair, partially open collar, wristband",      "adj": "confident cool"},
-    {"id": "student_haru",  "desc": "wavy orange hair, wide grin, colorful bag",                    "adj": "energetic funny"},
-    {"id": "student_zero",  "desc": "black hair covering one eye, expressionless, simple uniform",  "adj": "mysterious silent"},
-    {"id": "student_maki",  "desc": "long straight black hair, neat bow tie, calm expression",      "adj": "elegant quiet"},
-    {"id": "student_goro",  "desc": "short spiky red hair, broad shoulders, bandana around neck",   "adj": "energetic tough"},
-    {"id": "student_sora",  "desc": "messy blue hair, oversized uniform, headphones around neck",   "adj": "daydreaming relaxed"},
-    {"id": "student_taku",  "desc": "brown bowl-cut hair, plain uniform, gentle smile",             "adj": "friendly average"},
+    {"id": "student_rina",  "gender": "female", "desc": "pink twin-tails, sparkly eyes, ribbon accessories, navy pleated skirt",                                                "adj": "cheerful sparkling"},
+    {"id": "student_kenta", "gender": "male",   "desc": "short neat dark hair, round glasses, MALE BOY, navy dress pants trousers NO skirt, white shirt tucked in, holding book", "adj": "serious studious"},
+    {"id": "student_ren",   "gender": "male",   "desc": "spiky dyed-brown hair, open collar, wristband, MALE BOY, navy trousers pants NO skirt, tough masculine look",             "adj": "confident cool"},
+    {"id": "student_haru",  "gender": "female", "desc": "wavy orange hair, wide grin, colorful shoulder bag, navy pleated skirt",                                                "adj": "energetic funny"},
+    {"id": "student_zero",  "gender": "male",   "desc": "long black hair covering one eye, MALE BOY, navy trousers pants NO skirt, expressionless face, slim figure",             "adj": "mysterious silent"},
+    {"id": "student_maki",  "gender": "female", "desc": "long straight black hair, neat bow tie, calm expression, navy pleated skirt",                                           "adj": "elegant quiet"},
+    {"id": "student_goro",  "gender": "male",   "desc": "short spiky red hair, broad wide shoulders, bandana around neck, MALE BOY, navy trousers pants NO skirt, muscular build", "adj": "energetic tough"},
+    {"id": "student_sora",  "gender": "female", "desc": "messy light blue hair, oversized jacket, headphones around neck, navy pleated skirt",                                   "adj": "daydreaming relaxed"},
+    {"id": "student_taku",  "gender": "male",   "desc": "brown bowl-cut hair, plain uniform, gentle smile, MALE BOY, navy trousers pants NO skirt, average build",               "adj": "friendly average"},
     # 主人公・校長
-    {"id": "player_male",   "desc": "short spiky brown hair, white dress shirt, navy pants, light blue necktie, waving hand",  "adj": "friendly energetic"},
-    {"id": "player_female", "desc": "plain straight dark brown bob cut, no accessories, white sailor uniform, navy skirt",     "adj": "calm neutral"},
-    {"id": "principal",     "desc": "grey hair, glasses, formal suit, gentle expression",                                      "adj": "dignified calm"},
+    {"id": "player_male",   "gender": "male",   "desc": "short spiky brown hair, white dress shirt, navy dress pants trousers, light blue necktie, waving hand, MALE BOY",       "adj": "friendly energetic"},
+    {"id": "player_female", "gender": "female", "desc": "plain straight dark brown bob cut, no accessories, white sailor uniform, navy pleated skirt",                           "adj": "calm neutral"},
+    {"id": "principal",     "gender": "male",   "desc": "completely bald head, thick grey mustache and beard, round glasses, wrinkled face, oversized ill-fitting suit, clumsy cheerful expression, no stick, no scroll", "adj": "goofy laughing"},
 ]
 
 CHAR_MAP = {c["id"]: c for c in CHARACTERS}
 
 # ── プロンプトビルダー ─────────────────────────────────
-def build_prompt(desc: str, adj: str) -> str:
+def build_prompt(desc: str, adj: str, gender: str = "female") -> str:
+    if gender == "male":
+        uniform = "Japanese male school uniform with navy dress pants trousers, white shirt, NO skirt"
+    else:
+        uniform = "Japanese female school uniform with navy pleated skirt, white sailor top"
     return (
         f"Cute chibi anime character, 2-head proportion, big head small body, {desc}, "
-        "Japanese school uniform, thick black outline, flat colors, no gradient, pastel palette, "
+        f"{uniform}, thick black outline, flat colors, no gradient, pastel palette, "
         "pure white background, NO white sticker border, NO drop shadow, "
         f"large expressive eyes, {adj} pose, clean vector-like style, game sprite style"
     )
@@ -116,7 +120,7 @@ def process(char: dict, raw_only: bool = False) -> None:
         raw_bytes = raw_path.read_bytes()
     else:
         print(f"[...] {sid} generating...")
-        raw_bytes = generate_image(build_prompt(char["desc"], char["adj"]))
+        raw_bytes = generate_image(build_prompt(char["desc"], char["adj"], char.get("gender", "female")))
         raw_path.write_bytes(raw_bytes)
         print(f"      raw saved -> {raw_path}")
 

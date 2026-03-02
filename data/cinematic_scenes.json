@@ -6,25 +6,25 @@
       "lines": [
         {
           "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
-          "right": null,
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
           "speaker": "left",
           "text": "やあやあ、{player_name}{player_suffix}！ちょうどよかった、呼ぼうとしとったんじゃ！"
         },
         {
           "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
-          "right": null,
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
           "speaker": "left",
           "text": "本日より、本校・私立夕凪学園の名物制度を君に担当してもらうことになったぞ！"
         },
         {
           "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
-          "right": null,
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
           "speaker": "left",
           "text": "その名も…『転校生ガチャ制度』！毎朝一人、全国から転校生がやってくる不思議な制度じゃ！"
         },
         {
           "left":  { "sprite": "res://assets/sprites/principal_48x48.png", "name": "ポンコツ校長" },
-          "right": null,
+          "right": { "sprite": "res://assets/sprites/{player_sprite}", "name": "{player_name}" },
           "speaker": "left",
           "text": "そして転校生の席を決めるのが——今学期から、君の仕事じゃ！"
         },

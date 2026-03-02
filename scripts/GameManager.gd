@@ -24,20 +24,20 @@ var today_student: Dictionary = {}
 # 当日パイプライン結果（ResultPresenterに渡す）
 var last_day_result: Dictionary = {}
 
+# 今日の授業科目（CLASS_PHASE入場時に確定させる）
+var today_subject: String = ""
+
 # プレイヤーデータ
 var player_name: String = "主人公"
 var player_gender: String = "female"
-var player_seat: int = -1
+var player_seat: int = 5  # 固定: 6番席（0-indexed=5）
 var player_type: String = "futsu"
 var player_like_type: String = ""
 var player_dislike_type: String = ""
+var player_skill: String = "study"  # 得意能力
 
-# 初期クラスメイト配置定義
-const INITIAL_STUDENTS: Array = [
-	{"id": "student_rina",  "seat": 0},
-	{"id": "student_kenta", "seat": 3},
-	{"id": "student_haru",  "seat": 12}
-]
+# 初期クラスメイトの席（主人公の右隣: 7番席 = 0-indexed 6）
+const INITIAL_CLASSMATE_SEAT: int = 6
 
 # シグナル
 signal phase_changed(new_phase: Phase)
@@ -52,13 +52,14 @@ func go_to_player_setup() -> void:
 
 ## 主人公設定完了 → シネマティックへ
 func complete_player_setup(name: String, gender: String, p_type: String,
-		like_type: String, dislike_type: String, seat: int) -> void:
+		like_type: String, dislike_type: String, skill: String) -> void:
 	player_name    = name
 	player_gender  = gender
 	player_type    = p_type
 	player_like_type    = like_type
 	player_dislike_type = dislike_type
-	player_seat    = seat
+	player_skill   = skill
+	player_seat    = 5  # 常に6番席（0-indexed 5）固定
 	cinematic_requested.emit("opening")
 
 ## ゲーム開始（オープニングシネマティック終了後に Main.tscn から呼ばれる）
@@ -67,37 +68,87 @@ func start_new_game(board: Node) -> void:
 	current_cycle  = 1
 	today_student  = {}
 	last_day_result = {}
+	today_subject  = ""
 
 	CharacterState.reset()
 	FriendshipManager.reset()
 	StudentDB.set_cycle(current_cycle)
 
-	# プレイヤーを CharacterState に登録
+	# プレイヤーを CharacterState に登録（得意能力を+3）
+	var init_study  = 2
+	var init_sports = 2
+	var init_art    = 2
+	match player_skill:
+		"study":  init_study  += 3
+		"sports": init_sports += 3
+		"art":    init_art    += 3
 	CharacterState.init_character("player", {
-		"gender":       player_gender,
-		"type":         player_type,
-		"like_type":    player_like_type,
-		"dislike_type": player_dislike_type,
-		"initial_study":   2,
-		"initial_sports":  2,
-		"initial_art":     2,
+		"gender":          player_gender,
+		"type":            player_type,
+		"like_type":       player_like_type,
+		"dislike_type":    player_dislike_type,
+		"initial_study":   init_study,
+		"initial_sports":  init_sports,
+		"initial_art":     init_art,
 		"abilities":       []
 	})
 	FriendshipManager.init_for_character("player", [])
 
-	# 初期クラスメイト3人を配置
-	for entry in INITIAL_STUDENTS:
-		var s_data = StudentDB.get_student_by_id(entry["id"])
-		if s_data.is_empty():
-			continue
-		board.place_student(entry["seat"], s_data)
-		_register_character(entry["id"], s_data)
+	# プレイヤー席をボードに設定
+	board.player_seat = player_seat
+
+	# 初期クラスメイト1名を条件に合わせて選んで配置
+	var classmate = _pick_initial_classmate()
+	if not classmate.is_empty():
+		board.place_student(INITIAL_CLASSMATE_SEAT, classmate)
+		_register_character(classmate["id"], classmate)
 
 	# プレイヤーとの仲良し度を初期化
 	FriendshipManager.init_for_character("player", CharacterState.get_all_active_ids())
 
 	_change_phase(Phase.START_PHASE)
 	_begin_day()
+
+## 初期クラスメイトを選ぶ
+## 条件: 主人公の異性 / type == like_type / type != dislike_type / 得意能力が主人公の左を+1
+func _pick_initial_classmate() -> Dictionary:
+	var all_students = StudentDB.get_all_students()
+	var opposite_gender = "male" if player_gender == "female" else "female"
+
+	# 条件に合う候補を探す
+	var candidates = []
+	for s in all_students:
+		if s.get("gender", "") != opposite_gender:
+			continue
+		var stype = s.get("type", "")
+		if player_like_type != "" and stype != player_like_type:
+			continue
+		# dislike_type と like_type が同じ場合は除外しない
+		if player_dislike_type != "" and player_dislike_type != player_like_type and stype == player_dislike_type:
+			continue
+		candidates.append(s)
+
+	# 候補がいない場合は異性のみで再選択
+	if candidates.is_empty():
+		for s in all_students:
+			if s.get("gender", "") == opposite_gender:
+				candidates.append(s)
+
+	# それでもいない場合は全員から
+	if candidates.is_empty() and not all_students.is_empty():
+		candidates = all_students
+
+	if candidates.is_empty():
+		return {}
+
+	# ランダムに1名選択
+	var chosen = candidates[randi() % candidates.size()].duplicate()
+
+	# 得意能力に合うサポーター能力を付与
+	var supporter_ability = "supporter_" + player_skill
+	chosen["abilities"] = [supporter_ability]
+
+	return chosen
 
 ## 転校生配置後 → 授業フェーズへ
 ## placed_new: 今日の転校生を盤面に配置した場合 true
@@ -107,6 +158,8 @@ func go_to_class_phase(board: Node, placed_new: bool) -> void:
 		if s_id != "" and not CharacterState.get_state(s_id).has("study"):
 			_register_character(s_id, today_student)
 			FriendshipManager.init_for_character("player", CharacterState.get_all_active_ids())
+	# 科目をここで確定（CLASS_PHASE表示と advance_day で同じ科目を使う）
+	today_subject = LessonManager.pick_subject()
 	_change_phase(Phase.CLASS_PHASE)
 
 ## 日次処理パイプライン実行 → 帰宅フェーズへ（CLASS_PHASE から呼ぶ）
@@ -132,12 +185,14 @@ func reset_to_title() -> void:
 	current_cycle  = 1
 	today_student  = {}
 	last_day_result = {}
+	today_subject  = ""
 	player_name    = "主人公"
 	player_gender  = "female"
-	player_seat    = -1
+	player_seat    = 5
 	player_type    = "futsu"
 	player_like_type    = ""
 	player_dislike_type = ""
+	player_skill   = "study"
 	CharacterState.reset()
 	FriendshipManager.reset()
 	StudentDB.set_cycle(1)
@@ -154,7 +209,8 @@ func get_save_data() -> Dictionary:
 		"player_seat":          player_seat,
 		"player_type":          player_type,
 		"player_like_type":     player_like_type,
-		"player_dislike_type":  player_dislike_type
+		"player_dislike_type":  player_dislike_type,
+		"player_skill":         player_skill
 	}
 
 func load_save_data(data: Dictionary) -> void:
@@ -162,10 +218,11 @@ func load_save_data(data: Dictionary) -> void:
 	current_cycle        = data.get("current_cycle", 1)
 	player_name          = data.get("player_name", "主人公")
 	player_gender        = data.get("player_gender", "female")
-	player_seat          = data.get("player_seat", -1)
+	player_seat          = data.get("player_seat", 5)
 	player_type          = data.get("player_type", "futsu")
 	player_like_type     = data.get("player_like_type", "")
 	player_dislike_type  = data.get("player_dislike_type", "")
+	player_skill         = data.get("player_skill", "study")
 	StudentDB.set_cycle(current_cycle)
 
 # --- Private ---
@@ -182,18 +239,22 @@ func _register_character(char_id: String, master_data: Dictionary) -> void:
 func _run_daily_pipeline(board: Node) -> Dictionary:
 	var result = {
 		"day":               current_day,
-		"subject":           "",
+		"subject":           today_subject,
 		"is_test":           false,
 		"test_results":      {},
+		"test_scores":       {},  # char_id -> {score, passing}
 		"ability_log":       [],
 		"fulfillment_deltas": {},
 		"transfers":         []
 	}
 
-	# Step 1: 科目決定
-	var subject  = LessonManager.pick_subject()
+	# Step 1: 科目は today_subject （CLASS_PHASE入場時に確定済み）
+	var subject  = today_subject
+	if subject.is_empty():
+		subject = LessonManager.pick_subject()
+		today_subject = subject
+		result["subject"] = subject
 	var is_test  = LessonManager.is_test_day(current_day)
-	result["subject"] = subject
 	result["is_test"]  = is_test
 
 	# Step 2: 全キャラに授業効果（充実度10以上は×2）
@@ -219,12 +280,17 @@ func _run_daily_pipeline(board: Node) -> Dictionary:
 	# Step 6: テスト日なら判定・反映
 	if is_test:
 		var test_results: Dictionary = {}
+		var test_scores: Dictionary = {}
 		var passing = LessonManager.get_passing_score(current_day)
 		for char_id in CharacterState.get_all_active_ids():
-			var passed = LessonManager.evaluate_test_for_char(char_id, subject, current_day)
+			var state = CharacterState.get_state(char_id)
+			var score = state.get(subject, 0)
+			var passed = score >= passing
 			FulfillmentCalc.apply_test_result(char_id, passed)
 			test_results[char_id] = passed
+			test_scores[char_id] = {"score": score, "passing": passing}
 		result["test_results"] = test_results
+		result["test_scores"]  = test_scores
 
 	# Step 7: 転校判定（充実度≤-10のキャラを退場）
 	var transfers = FulfillmentCalc.get_transfer_candidates("player")

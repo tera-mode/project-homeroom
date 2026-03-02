@@ -94,6 +94,33 @@
         { "scope": "self", "effect_type": "fulfillment", "delta": -1 },
         { "scope": "self", "effect_type": "param", "target_param": "study", "delta": 2 }
       ]
+    },
+    {
+      "ability_id": "supporter_study",
+      "name": "勉強サポーター",
+      "description": "左のキャラの勉強を毎日+1する",
+      "icon": "📘",
+      "effects": [
+        { "scope": "left_only", "effect_type": "param", "target_param": "study", "delta": 1 }
+      ]
+    },
+    {
+      "ability_id": "supporter_sports",
+      "name": "運動サポーター",
+      "description": "左のキャラの運動を毎日+1する",
+      "icon": "🏅",
+      "effects": [
+        { "scope": "left_only", "effect_type": "param", "target_param": "sports", "delta": 1 }
+      ]
+    },
+    {
+      "ability_id": "supporter_art",
+      "name": "芸術サポーター",
+      "description": "左のキャラの芸術を毎日+1する",
+      "icon": "🖌",
+      "effects": [
+        { "scope": "left_only", "effect_type": "param", "target_param": "art", "delta": 1 }
+      ]
     }
   ]
 }
