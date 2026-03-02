@@ -7,6 +7,11 @@ saves/
 # Claude Code ワークスペース（メモリは別リポジトリで管理）
 .claude/
 
+# 環境変数・シークレット
+.env
+.env.*
+!.env.example
+
 # OS
 Thumbs.db
 .DS_Store
